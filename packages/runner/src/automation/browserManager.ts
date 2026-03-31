@@ -1,6 +1,8 @@
 import type { Browser, BrowserContext, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { config } from '../config.js'
+import type { TaskContext } from '@browser-automation/shared'
+import { getResolvedBrowserConfig } from '../settings/browserConfigStore.js'
 
 type BrowserState = {
   browserConnected: boolean
@@ -14,6 +16,7 @@ let browser: Browser | null = null
 let context: BrowserContext | null = null
 let activePage: Page | null = null
 let hooksRegistered = false
+let activeBrowserConfigKey: string | null = null
 
 function log(message: string) {
   console.log(`[browser] ${message}`)
@@ -73,17 +76,46 @@ function attachPage(pageInstance: Page) {
 }
 
 async function createBrowser() {
+  const browserTarget = await getResolvedBrowserConfig()
+
+  if (browserTarget.mode === 'attach') {
+    browser = await chromium.connectOverCDP(browserTarget.cdpUrl!)
+    attachBrowser(browser)
+    activeBrowserConfigKey = serializeBrowserTarget(browserTarget)
+    log(`attached via cdp ${browserTarget.cdpUrl}`)
+    return
+  }
+
   browser = await chromium.launch({
     headless: config.HEADLESS,
     slowMo: config.SLOW_MO,
   })
   attachBrowser(browser)
+  activeBrowserConfigKey = serializeBrowserTarget(browserTarget)
   log(`launched (headless=${String(config.HEADLESS)}, slowMo=${String(config.SLOW_MO)})`)
 }
 
-async function createContext() {
+async function createContext(preferred?: Pick<TaskContext, 'url' | 'title'>) {
   if (!browser) {
     throw new Error('Cannot create browser context before launching the browser.')
+  }
+
+  const browserTarget = await getResolvedBrowserConfig()
+  if (browserTarget.mode === 'attach') {
+    const existingContexts = browser.contexts()
+    context = existingContexts[0] ?? null
+    if (!context) {
+      context = await browser.newContext({
+        viewport: { width: 1280, height: 800 },
+      })
+      log('context created on attached browser')
+    } else {
+      log('using attached browser context')
+    }
+    activePage = null
+    attachContext(context)
+    await selectBestPage(preferred)
+    return
   }
 
   context = await browser.newContext({
@@ -106,11 +138,19 @@ async function createPage() {
   log('page created')
 }
 
-export async function ensureBrowserSession(): Promise<{
+export async function ensureBrowserSession(preferred?: Pick<TaskContext, 'url' | 'title'>): Promise<{
   browser: Browser
   context: BrowserContext
   page: Page
 }> {
+  const browserTarget = await getResolvedBrowserConfig()
+  const browserConfigKey = serializeBrowserTarget(browserTarget)
+
+  if (activeBrowserConfigKey && activeBrowserConfigKey !== browserConfigKey) {
+    log(`browser target changed -> resetting session (${activeBrowserConfigKey} -> ${browserConfigKey})`)
+    await disposeBrowserSession()
+  }
+
   if (!browser?.isConnected()) {
     browser = null
     context = null
@@ -122,27 +162,22 @@ export async function ensureBrowserSession(): Promise<{
     context = null
     activePage = null
     log('recreating browser context')
-    await createContext()
+    await createContext(preferred)
   }
 
   if (!context) {
     throw new Error('Browser context was not available after initialization.')
   }
 
-  if (!canUsePage(activePage)) {
-    const existingPages = context.pages().filter((page) => canUsePage(page))
-    if (existingPages.length > 0) {
-      activePage = existingPages[existingPages.length - 1]
-      log('reusing existing page')
-    } else {
-      log('creating fresh page')
-      await createPage()
-    }
+  if (!canUsePage(activePage) || shouldSwapToPreferredPage(preferred)) {
+    await selectBestPage(preferred)
   }
 
   if (!browser || !context || !activePage) {
     throw new Error('Browser session was not available after initialization.')
   }
+
+  await activePage.bringToFront().catch(() => {})
 
   return {
     browser,
@@ -203,6 +238,7 @@ export async function disposeBrowserSession() {
     await browser.close().catch(() => {})
   }
   browser = null
+  activeBrowserConfigKey = null
 }
 
 export function registerBrowserShutdownHooks() {
@@ -223,4 +259,60 @@ export function registerBrowserShutdownHooks() {
   process.once('SIGINT', () => shutdown('SIGINT'))
   process.once('SIGTERM', () => shutdown('SIGTERM'))
   process.once('beforeExit', () => shutdown('beforeExit'))
+}
+
+async function selectBestPage(preferred?: Pick<TaskContext, 'url' | 'title'>) {
+  if (!context) {
+    throw new Error('Cannot select a page without a browser context.')
+  }
+
+  const existingPages = context.pages().filter((page) => canUsePage(page))
+  const preferredUrl = normalizeUrl(preferred?.url)
+  const matchedPage =
+    (preferredUrl
+      ? existingPages.find((page) => normalizeUrl(safePageUrl(page)) === preferredUrl)
+      : undefined) ??
+    existingPages[existingPages.length - 1]
+
+  if (matchedPage) {
+    activePage = matchedPage
+    log(`reusing page ${truncateUrl(safePageUrl(matchedPage)) || 'about:blank'}`)
+    return
+  }
+
+  log('creating fresh page')
+  await createPage()
+}
+
+function shouldSwapToPreferredPage(preferred?: Pick<TaskContext, 'url' | 'title'>) {
+  if (!activePage || !preferred?.url) {
+    return !canUsePage(activePage)
+  }
+
+  const currentUrl = normalizeUrl(safePageUrl(activePage))
+  const targetUrl = normalizeUrl(preferred.url)
+  return Boolean(targetUrl && currentUrl && currentUrl !== targetUrl)
+}
+
+function serializeBrowserTarget(target: Awaited<ReturnType<typeof getResolvedBrowserConfig>>) {
+  return JSON.stringify({
+    mode: target.mode,
+    cdpUrl: target.cdpUrl ?? null,
+  })
+}
+
+function safePageUrl(page: Page) {
+  try {
+    return page.url()
+  } catch {
+    return ''
+  }
+}
+
+function normalizeUrl(url?: string | null) {
+  return url?.trim().replace(/\/$/, '').toLowerCase() || ''
+}
+
+function truncateUrl(url: string) {
+  return url.length > 90 ? `${url.slice(0, 87)}...` : url
 }

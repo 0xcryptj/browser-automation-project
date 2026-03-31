@@ -32,6 +32,7 @@ export default function App() {
   const [runnerWarning, setRunnerWarning] = useState<string | null>(null)
   const [pageObservation, setPageObservation] = useState<PageObservation | null>(null)
   const [observeLoading, setObserveLoading] = useState(false)
+  const [pageAccessMessage, setPageAccessMessage] = useState<string | null>(null)
   const { state, submitTask, approve, cancel, reset, retryStream } = useTaskStream()
   const prevStatus = useRef(state.status)
 
@@ -44,11 +45,11 @@ export default function App() {
 
       const health = await runnerClient.health()
       setRunnerStatus(health.status === 'ok' ? 'connected' : 'disconnected')
-      setRunnerWarning(health.planner.warning ?? null)
+      setRunnerWarning(health.browserTarget?.warning ?? health.planner.warning ?? null)
       setRunnerDetails(
         health.browser?.browserConnected
-          ? `Runner ready. Planner: ${health.planner.provider}/${health.planner.model ?? 'default'}${health.browser.activePageUrl ? ` on ${safeHostname(health.browser.activePageUrl)}` : ''}`
-          : `Runner connected. Planner: ${health.planner.provider}/${health.planner.model ?? 'default'}. Browser launches on first task.`
+          ? `Runner ready. Planner: ${health.planner.provider}/${health.planner.model ?? 'default'} · Browser: ${health.browserTarget?.mode ?? 'launch'}${health.browser.activePageUrl ? ` on ${safeHostname(health.browser.activePageUrl)}` : ''}`
+          : `Runner connected. Planner: ${health.planner.provider}/${health.planner.model ?? 'default'} · Browser: ${health.browserTarget?.mode ?? 'launch'}${health.browserTarget?.mode === 'attach' ? ' (waiting for your Brave or Chrome session)' : '. Browser launches on first task.'}`
       )
     } catch {
       setRunnerStatus('disconnected')
@@ -102,10 +103,24 @@ export default function App() {
       const options: ObservationOptions = getDefaultObservationOptions(mode)
       const observation = await new Promise<PageObservation | null>((resolve) => {
         chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTEXT', options }, (response) => {
-          if (chrome.runtime.lastError || !response || response.error) {
+          // Require timestamp to distinguish a full observation from the background
+          // fallback stub { url, title } that is returned when the content script
+          // cannot inject (restricted pages, new-tab, etc.).
+          if (
+            chrome.runtime.lastError ||
+            !response ||
+            response.error ||
+            typeof response.timestamp !== 'number'
+          ) {
+            setPageAccessMessage(
+              chrome.runtime.lastError?.message ??
+                response?.error ??
+                'The assistant could not inspect this tab. Try a normal web page instead of a browser-internal page.'
+            )
             resolve(null)
             return
           }
+          setPageAccessMessage(null)
           resolve(response as PageObservation)
         })
       })
@@ -131,6 +146,13 @@ export default function App() {
         observation = await collectPage('task')
       } catch {
         observation = null
+      }
+
+      if (!observation && needsCurrentPageContext(prompt)) {
+        setPageAccessMessage(
+          'This task needs access to the current page, but the extension could not inspect this tab. Open a normal website tab and try again.'
+        )
+        return
       }
 
       await submitTask(prompt, observation, 'standard')
@@ -169,7 +191,7 @@ export default function App() {
         flexDirection: 'column',
         height: '100vh',
         overflow: 'hidden',
-        background: '#0f0f13',
+        background: '#0a0a0a',
         fontFamily: 'system-ui, -apple-system, sans-serif',
       }}
     >
@@ -178,15 +200,23 @@ export default function App() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '10px 14px',
-          borderBottom: '1px solid #1a1a2e',
+          padding: '9px 14px',
+          borderBottom: '1px solid #1a1a1a',
           flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ fontSize: 15 }}>AI</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', letterSpacing: '-0.01em' }}>
-            Browser Operator
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
+            style={{
+              display: 'inline-block',
+              width: 8,
+              height: 8,
+              background: '#6366f1',
+              flexShrink: 0,
+            }}
+          />
+          <span style={{ fontSize: 12, fontWeight: 500, color: '#4b5563', letterSpacing: '0.04em', fontFamily: 'monospace' }}>
+            browser-operator
           </span>
         </div>
 
@@ -196,9 +226,9 @@ export default function App() {
               onClick={reset}
               style={{
                 background: 'none',
-                border: '1px solid #313150',
-                borderRadius: 5,
-                color: '#64748b',
+                border: '1px solid #1e1e1e',
+                borderRadius: 0,
+                color: '#4b5563',
                 fontSize: 11,
                 padding: '3px 8px',
                 cursor: 'pointer',
@@ -213,8 +243,8 @@ export default function App() {
               onClick={() => void cancel()}
               style={{
                 background: 'none',
-                border: '1px solid #ef444444',
-                borderRadius: 5,
+                border: '1px solid #ef444430',
+                borderRadius: 0,
                 color: '#ef4444',
                 fontSize: 11,
                 padding: '3px 8px',
@@ -238,34 +268,31 @@ export default function App() {
       {runnerStatus === 'disconnected' && (
         <div
           style={{
-            background: '#1a0a0a',
-            padding: '6px 14px',
+            background: '#0c0505',
+            padding: '5px 14px',
             fontSize: 11,
             color: '#ef4444',
-            borderBottom: '1px solid #ef444422',
+            borderBottom: '1px solid #ef444420',
             flexShrink: 0,
+            fontFamily: 'monospace',
           }}
         >
-          Runner offline at{' '}
-          <code style={{ background: '#0f0f1a', padding: '1px 4px', borderRadius: 3 }}>
-            {runnerUrl}
-          </code>{' '}
-          - start it with{' '}
-          <code style={{ background: '#0f0f1a', padding: '1px 4px', borderRadius: 3 }}>
-            pnpm runner:dev
-          </code>
+          Runner offline at <code style={{ opacity: 0.7 }}>{runnerUrl}</code> — run{' '}
+          <code style={{ opacity: 0.7 }}>pnpm runner:dev</code>
         </div>
       )}
 
       {runnerStatus === 'connected' && runnerDetails && (
         <div
           style={{
-            background: '#08130d',
-            padding: '6px 14px',
-            fontSize: 11,
-            color: '#22c55e',
-            borderBottom: '1px solid #22c55e22',
+            background: '#050c08',
+            padding: '5px 14px',
+            fontSize: 10,
+            color: '#16a34a',
+            borderBottom: '1px solid #16a34a20',
             flexShrink: 0,
+            fontFamily: 'monospace',
+            letterSpacing: '0.02em',
           }}
         >
           {runnerDetails}
@@ -275,22 +302,39 @@ export default function App() {
       {runnerStatus === 'connected' && runnerWarning && (
         <div
           style={{
-            background: '#1a1500',
-            padding: '6px 14px',
-            fontSize: 11,
-            color: '#f59e0b',
-            borderBottom: '1px solid #f59e0b22',
+            background: '#0c0a00',
+            padding: '5px 14px',
+            fontSize: 10,
+            color: '#ca8a04',
+            borderBottom: '1px solid #ca8a0420',
             flexShrink: 0,
+            fontFamily: 'monospace',
           }}
         >
           {runnerWarning}
         </div>
       )}
 
+      {pageAccessMessage && (
+        <div
+          style={{
+            background: '#0c0a00',
+            padding: '5px 14px',
+            fontSize: 10,
+            color: '#ca8a04',
+            borderBottom: '1px solid #ca8a0420',
+            flexShrink: 0,
+            fontFamily: 'monospace',
+          }}
+        >
+          {pageAccessMessage}
+        </div>
+      )}
+
       <div
         style={{
           display: 'flex',
-          borderBottom: '1px solid #1a1a2e',
+          borderBottom: '1px solid #1a1a1a',
           flexShrink: 0,
           overflowX: 'auto',
         }}
@@ -302,10 +346,10 @@ export default function App() {
             style={{
               background: 'none',
               border: 'none',
-              borderBottom: tab === id ? '2px solid #6366f1' : '2px solid transparent',
-              color: tab === id ? '#e2e8f0' : '#475569',
-              fontSize: 12,
-              fontWeight: 600,
+              borderBottom: tab === id ? '1px solid #6366f1' : '1px solid transparent',
+              color: tab === id ? '#9ca3af' : '#374151',
+              fontSize: 11,
+              fontWeight: 500,
               padding: '7px 12px',
               cursor: 'pointer',
               flexShrink: 0,
@@ -349,12 +393,12 @@ export default function App() {
                 onClick={() => void retryStream()}
                 style={{
                   alignSelf: 'flex-start',
-                  background: '#1e1e2e',
-                  border: '1px solid #313150',
-                  borderRadius: 6,
-                  color: '#cbd5e1',
+                  background: 'transparent',
+                  border: '1px solid #1e1e1e',
+                  borderRadius: 0,
+                  color: '#4b5563',
                   fontSize: 11,
-                  padding: '6px 10px',
+                  padding: '5px 10px',
                   cursor: 'pointer',
                 }}
               >
@@ -362,46 +406,63 @@ export default function App() {
               </button>
             )}
 
+            {state.status === 'error' && !state.taskId && state.prompt && (
+              <button
+                onClick={() => void handleSubmit(state.prompt)}
+                style={{
+                  alignSelf: 'flex-start',
+                  background: 'transparent',
+                  border: '1px solid #1e1e1e',
+                  borderRadius: 0,
+                  color: '#4b5563',
+                  fontSize: 11,
+                  padding: '5px 10px',
+                  cursor: 'pointer',
+                }}
+              >
+                Try again
+              </button>
+            )}
+
             {!hasResult && (
               <div
                 style={{
-                  textAlign: 'center',
-                  fontSize: 12,
-                  padding: '24px 16px',
+                  fontSize: 11,
+                  padding: '16px 0',
                   userSelect: 'none',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
                 }}
               >
-                <div style={{ fontSize: 28, marginBottom: 10 }}>WEB</div>
-                <div style={{ color: '#334155' }}>Describe a task and I&apos;ll automate it.</div>
-                <div style={{ color: '#1e293b', fontSize: 11, marginTop: 4 }}>
-                  I&apos;ll ground each task on the current page before acting.
+                <div style={{ color: '#222', marginBottom: 8, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'monospace' }}>
+                  examples
                 </div>
-                <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {[
-                    'Go to example.com',
-                    'Extract the main heading',
-                    'Search for TypeScript on google.com',
-                    'Take a screenshot of this page',
-                  ].map((examplePrompt) => (
-                    <button
-                      key={examplePrompt}
-                      onClick={() => void handleSubmit(examplePrompt)}
-                      disabled={isRunning || runnerStatus !== 'connected'}
-                      style={{
-                        background: '#1a1a2a',
-                        border: '1px solid #1e2040',
-                        borderRadius: 6,
-                        color: '#475569',
-                        fontSize: 11,
-                        padding: '5px 10px',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                      }}
-                    >
-                      {examplePrompt}
-                    </button>
-                  ))}
-                </div>
+                {[
+                  'Go to example.com',
+                  'Extract the main heading',
+                  'Search for TypeScript on google.com',
+                  'Take a screenshot of this page',
+                ].map((examplePrompt) => (
+                  <button
+                    key={examplePrompt}
+                    onClick={() => void handleSubmit(examplePrompt)}
+                    disabled={isRunning || runnerStatus !== 'connected'}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #141414',
+                      borderRadius: 0,
+                      color: '#333',
+                      fontSize: 11,
+                      padding: '5px 10px',
+                      cursor: isRunning || runnerStatus !== 'connected' ? 'not-allowed' : 'pointer',
+                      textAlign: 'left',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {examplePrompt}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -436,11 +497,15 @@ export default function App() {
 
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes dotPulse {
+          0%, 80%, 100% { opacity: 0.15; transform: scale(0.8); }
+          40% { opacity: 1; transform: scale(1); }
+        }
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #1e2040; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb { background: #1e1e1e; border-radius: 0; }
       `}</style>
     </div>
   )
@@ -452,4 +517,25 @@ function safeHostname(url: string) {
   } catch {
     return url
   }
+}
+
+function needsCurrentPageContext(prompt: string) {
+  const normalized = prompt.toLowerCase()
+  return [
+    'this page',
+    'current page',
+    'what am i viewing',
+    'what im viewing',
+    'what i am viewing',
+    'read the page',
+    'tell me about the page',
+    'tell me about this page',
+    'summarize this page',
+    'fill this form',
+    'fill out this form',
+    'click the',
+    'type into',
+    'write a review',
+    'review this place',
+  ].some((phrase) => normalized.includes(phrase))
 }

@@ -25,7 +25,15 @@ export async function taskRoutes(server: FastifyInstance) {
   server.post('/task', async (request, reply) => {
     const parse = TaskRequest.safeParse(request.body)
     if (!parse.success) {
-      return reply.status(400).send({ error: 'Invalid request', issues: parse.error.issues })
+      const summary = parse.error.issues
+        .slice(0, 4)
+        .map((i) => {
+          const path = i.path.join('.')
+          return path ? `${path}: ${i.message}` : i.message
+        })
+        .join(', ')
+      server.log.warn(`[task] Invalid request — ${summary}`)
+      return reply.status(400).send({ error: 'Invalid request', detail: summary, issues: parse.error.issues })
     }
 
     const taskRequest = parse.data
@@ -47,6 +55,9 @@ export async function taskRoutes(server: FastifyInstance) {
               url: taskRequest.url ?? taskRequest.observation.url,
               title: taskRequest.title ?? taskRequest.observation.title,
               snapshot: taskRequest.observation.snapshot,
+              text: taskRequest.observation.text,
+              headings: taskRequest.observation.headings,
+              textBlocks: taskRequest.observation.textBlocks?.map((block) => block.text),
             }
           : {
               url: taskRequest.url,
@@ -118,6 +129,24 @@ export async function taskRoutes(server: FastifyInstance) {
     const stored = planStore.get(id)
     if (!stored) return reply.status(404).send({ error: 'Task not found' })
     return reply.send({ taskId: id, plan: stored })
+  })
+
+  server.get<{ Params: { id: string } }>('/task/:id/events', async (request, reply) => {
+    const { id } = request.params
+    const plan = planStore.get(id)
+    const result = resultStore.get(id)
+    const events = taskBus.getEvents(id)
+
+    if (!plan && !result && events.length === 0) {
+      return reply.status(404).send({ error: 'Task not found' })
+    }
+
+    return reply.send({
+      taskId: id,
+      status: result?.plan.status ?? plan?.status ?? null,
+      plannerUsed: result?.plan.plannerUsed ?? plan?.plannerUsed ?? null,
+      events,
+    })
   })
 
   /**

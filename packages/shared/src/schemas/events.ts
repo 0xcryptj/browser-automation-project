@@ -17,6 +17,9 @@ export const TaskEvent = z.discriminatedUnion('type', [
     stepIndex: z.number(),
     actionType: z.string(),
     description: z.string(),
+    selector: z.string().optional(),
+    elementRef: z.string().optional(),
+    targetLabel: z.string().optional(),
   }),
   z.object({
     type: z.literal('step_succeeded'),

@@ -7,6 +7,9 @@ export type LiveStep = {
   index: number
   actionType: string
   description: string
+  selector?: string
+  elementRef?: string
+  targetLabel?: string
   status: 'pending' | 'running' | 'done' | 'failed' | 'awaiting_approval' | 'skipped'
   result?: string
   error?: string
@@ -47,6 +50,19 @@ export function useTaskStream() {
     esRef.current = null
   }, [])
 
+  const updateOverlay = useCallback(
+    (message: { type: 'TASK_OVERLAY_SHOW' | 'TASK_OVERLAY_CLEAR'; payload?: Record<string, unknown> }) => {
+      try {
+        chrome.runtime.sendMessage(message, () => {
+          void chrome.runtime.lastError
+        })
+      } catch {
+        // Ignore overlay messaging failures on restricted pages.
+      }
+    },
+    []
+  )
+
   const openStream = useCallback(
     async (taskId: string) => {
       closeStream()
@@ -61,6 +77,7 @@ export function useTaskStream() {
         let event: TaskEvent
         try { event = JSON.parse(e.data) as TaskEvent } catch { return }
         setState((prev) => applyEvent(prev, event))
+        syncOverlay(event, updateOverlay)
         if (event.type === 'task_completed' || event.type === 'task_failed' || event.type === 'task_cancelled') {
           setTimeout(closeStream, 400)
         }
@@ -72,6 +89,7 @@ export function useTaskStream() {
         try {
           const snapshot = await runnerClient.getTask(taskId)
           setState((prev) => reconcileWithTaskSnapshot(prev, snapshot))
+          updateOverlay({ type: 'TASK_OVERLAY_CLEAR' })
         } catch {
           setState((prev) => {
             if (
@@ -92,12 +110,13 @@ export function useTaskStream() {
         }
       }
     },
-    [closeStream]
+    [closeStream, updateOverlay]
   )
 
   const submitTask = useCallback(
     async (prompt: string, observation?: PageObservation | null, mode: 'standard' | 'assist' = 'standard') => {
       closeStream()
+      updateOverlay({ type: 'TASK_OVERLAY_CLEAR' })
       setState({ ...INITIAL, prompt, status: 'submitting' })
 
       try {
@@ -109,7 +128,11 @@ export function useTaskStream() {
           id: taskId,
           prompt,
           mode,
-          url: observation?.url,
+          // Only forward the URL if it's a valid http/https URL — the runner's
+          // Zod schema uses z.string().url() which rejects chrome://, about:,
+          // empty strings, etc. If there's no valid URL, send undefined so the
+          // runner can fall back to whatever the browser has open.
+          url: isHttpUrl(observation?.url) ? observation!.url : undefined,
           title: observation?.title,
           observation: observation ?? undefined,
         })
@@ -138,13 +161,14 @@ export function useTaskStream() {
         }))
       }
     },
-    [closeStream, openStream]
+    [closeStream, openStream, updateOverlay]
   )
 
   const approve = useCallback(
     async (taskId: string, stepIndex: number, approved: boolean) => {
       setState((prev) => ({ ...prev, pendingApproval: null, status: 'streaming' }))
       closeStream()
+      updateOverlay({ type: 'TASK_OVERLAY_CLEAR' })
       try {
         await runnerClient.approve(taskId, stepIndex, approved)
         await openStream(taskId)
@@ -156,7 +180,7 @@ export function useTaskStream() {
         }))
       }
     },
-    [closeStream, openStream]
+    [closeStream, openStream, updateOverlay]
   )
 
   const cancel = useCallback(
@@ -165,15 +189,17 @@ export function useTaskStream() {
         await runnerClient.cancel(state.taskId).catch(() => {})
       }
       closeStream()
+      updateOverlay({ type: 'TASK_OVERLAY_CLEAR' })
       setState((prev) => ({ ...prev, status: 'cancelled' }))
     },
-    [state.taskId, closeStream]
+    [state.taskId, closeStream, updateOverlay]
   )
 
   const reset = useCallback(() => {
     closeStream()
+    updateOverlay({ type: 'TASK_OVERLAY_CLEAR' })
     setState(INITIAL)
-  }, [closeStream])
+  }, [closeStream, updateOverlay])
 
   const retryStream = useCallback(async () => {
     if (!state.taskId) return
@@ -181,7 +207,13 @@ export function useTaskStream() {
     await openStream(state.taskId)
   }, [openStream, state.taskId])
 
-  useEffect(() => closeStream, [closeStream])
+  useEffect(
+    () => () => {
+      closeStream()
+      updateOverlay({ type: 'TASK_OVERLAY_CLEAR' })
+    },
+    [closeStream, updateOverlay]
+  )
 
   return { state, submitTask, approve, cancel, reset, retryStream }
 }
@@ -207,6 +239,9 @@ function applyEvent(state: StreamState, event: TaskEvent): StreamState {
           index: event.stepIndex,
           actionType: event.actionType,
           description: event.description,
+          selector: event.selector,
+          elementRef: event.elementRef,
+          targetLabel: event.targetLabel,
           status: 'running',
         }),
       }
@@ -240,6 +275,9 @@ function applyEvent(state: StreamState, event: TaskEvent): StreamState {
         pendingApproval: event,
         steps: upsertStep(state.steps, {
           index: event.stepIndex,
+          selector: event.action.selector ?? undefined,
+          elementRef: event.action.elementRef ?? undefined,
+          targetLabel: event.action.selector ?? event.action.elementRef ?? undefined,
           status: 'awaiting_approval',
         }),
       }
@@ -314,6 +352,54 @@ function markFirstPendingStepFailed(steps: LiveStep[], error: string): LiveStep[
         }
       : step
   )
+}
+
+function isHttpUrl(url: string | undefined): url is string {
+  return typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))
+}
+
+function syncOverlay(
+  event: TaskEvent,
+  updateOverlay: (message: { type: 'TASK_OVERLAY_SHOW' | 'TASK_OVERLAY_CLEAR'; payload?: Record<string, unknown> }) => void
+) {
+  switch (event.type) {
+    case 'step_started':
+      updateOverlay({
+        type: 'TASK_OVERLAY_SHOW',
+        payload: {
+          actionType: event.actionType,
+          description: event.description,
+          selector: event.selector,
+          elementRef: event.elementRef,
+          targetLabel: event.targetLabel,
+          status: 'running',
+        },
+      })
+      return
+
+    case 'approval_required':
+      updateOverlay({
+        type: 'TASK_OVERLAY_SHOW',
+        payload: {
+          actionType: event.action.type,
+          description: event.action.description,
+          selector: event.action.selector ?? undefined,
+          elementRef: event.action.elementRef ?? undefined,
+          targetLabel: event.action.selector ?? event.action.elementRef ?? undefined,
+          status: 'awaiting_approval',
+        },
+      })
+      return
+
+    case 'task_completed':
+    case 'task_failed':
+    case 'task_cancelled':
+      updateOverlay({ type: 'TASK_OVERLAY_CLEAR' })
+      return
+
+    default:
+      return
+  }
 }
 
 function reconcileWithTaskSnapshot(

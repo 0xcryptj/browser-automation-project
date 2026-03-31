@@ -1,88 +1,269 @@
 import type { StreamState } from '../hooks/useTaskStream.js'
 
-const ACTION_ICONS: Record<string, string> = {
-  goto: 'GL',
-  click: 'CL',
-  type: 'TY',
-  select: 'SE',
-  scroll: 'SC',
-  hover: 'HO',
-  press: 'PR',
-  wait_for_selector: 'WT',
-  wait_for_text: 'WT',
-  extract: 'EX',
-  screenshot: 'SS',
+// ── Minimal line icons (Icon8 Outlined style) ─────────────────────────────────
+
+function IconGoto() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 8h10M8 4l4 4-4 4" />
+    </svg>
+  )
+}
+function IconClick() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 2l9 6-4 1-2 5z" />
+    </svg>
+  )
+}
+function IconType() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 2l4 4-8 8H2v-4z" />
+    </svg>
+  )
+}
+function IconSelect() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="12" height="10" rx="1" />
+      <path d="M5 8l3 3 3-3" />
+    </svg>
+  )
+}
+function IconScroll() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="2" x2="8" y2="14" />
+      <path d="M4 6l4-4 4 4M4 10l4 4 4-4" />
+    </svg>
+  )
+}
+function IconHover() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 2v6M8 4v4M10 5v3M4 7v3a4 4 0 008 0V7H4z" />
+    </svg>
+  )
+}
+function IconPress() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="4" width="14" height="8" rx="1" />
+      <line x1="4" y1="8" x2="5" y2="8" />
+      <line x1="7.5" y1="8" x2="8.5" y2="8" />
+      <line x1="11" y1="8" x2="12" y2="8" />
+      <line x1="5.5" y1="10" x2="10.5" y2="10" />
+    </svg>
+  )
+}
+function IconWait() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 5v3l2.5 1.5" />
+    </svg>
+  )
+}
+function IconExtract() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V5L9 1z" />
+      <path d="M9 1v4h4" />
+      <line x1="5" y1="9" x2="11" y2="9" />
+      <line x1="5" y1="12" x2="8" y2="12" />
+    </svg>
+  )
+}
+function IconScreenshot() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="4" width="14" height="10" rx="1" />
+      <circle cx="8" cy="9" r="2.5" />
+      <path d="M5 4l1.5-2h3L11 4" />
+    </svg>
+  )
+}
+function IconDefault() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6" />
+      <line x1="8" y1="6" x2="8" y2="8" />
+      <line x1="8" y1="10.5" x2="8" y2="11" />
+    </svg>
+  )
 }
 
-const STATUS_STYLE: Record<string, { color: string; label: string }> = {
-  pending: { color: '#475569', label: 'Pending' },
-  running: { color: '#f59e0b', label: 'Running' },
-  done: { color: '#22c55e', label: 'Done' },
-  failed: { color: '#ef4444', label: 'Failed' },
-  awaiting_approval: { color: '#a855f7', label: 'Approval' },
-  skipped: { color: '#475569', label: 'Skipped' },
+function ActionIcon({ type }: { type: string }) {
+  switch (type) {
+    case 'goto': return <IconGoto />
+    case 'click': return <IconClick />
+    case 'type': return <IconType />
+    case 'select': return <IconSelect />
+    case 'scroll': return <IconScroll />
+    case 'hover': return <IconHover />
+    case 'press':
+    case 'pressKey': return <IconPress />
+    case 'wait_for_selector':
+    case 'wait_for_text': return <IconWait />
+    case 'extract': return <IconExtract />
+    case 'screenshot': return <IconScreenshot />
+    default: return <IconDefault />
+  }
 }
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+
+const STATUS_COLOR: Record<string, string> = {
+  pending: '#2a2a2a',
+  running: '#3b82f6',
+  done: '#22c55e',
+  failed: '#ef4444',
+  awaiting_approval: '#a855f7',
+  skipped: '#374151',
+}
+
+const TASK_STATUS_LABEL: Record<string, string> = {
+  idle: 'idle',
+  submitting: 'submitting',
+  planning: 'planning',
+  streaming: 'running',
+  done: 'done',
+  failed: 'failed',
+  cancelled: 'cancelled',
+  awaiting_approval: 'awaiting approval',
+  error: 'error',
+}
+
+function StepStatusMark({ status }: { status: string }) {
+  if (status === 'running') return <DotSpinner />
+  if (status === 'done') return <span style={{ color: '#22c55e' }}>✓</span>
+  if (status === 'failed') return <span style={{ color: '#ef4444' }}>✗</span>
+  if (status === 'awaiting_approval') return <span style={{ color: '#a855f7' }}>?</span>
+  return <span style={{ color: '#2a2a2a' }}>·</span>
+}
+
+function DotSpinner() {
+  return (
+    <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          style={{
+            display: 'inline-block',
+            width: 3,
+            height: 3,
+            background: '#3b82f6',
+            borderRadius: '50%',
+            animation: `dotPulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+          }}
+        />
+      ))}
+    </span>
+  )
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
   state: StreamState
 }
 
 export function LiveTaskView({ state }: Props) {
-  const { status, steps, stepCount, durationMs, error, prompt } = state
+  const { status, steps, durationMs, error, prompt } = state
 
-  const doneCount = steps.filter((step) => step.status === 'done').length
-  const failedCount = steps.filter((step) => step.status === 'failed').length
+  const doneCount = steps.filter((s) => s.status === 'done').length
+  const failedCount = steps.filter((s) => s.status === 'failed').length
+  const answer = buildAnswer(state)
+
+  const isActive =
+    status === 'streaming' || status === 'planning' || status === 'submitting'
+  const isTerminal =
+    status === 'done' || status === 'failed' || status === 'cancelled' || status === 'error'
+
+  const headerAccentColor =
+    status === 'done'
+      ? '#22c55e'
+      : status === 'failed' || status === 'error'
+        ? '#ef4444'
+        : status === 'cancelled'
+          ? '#f59e0b'
+          : status === 'awaiting_approval'
+            ? '#a855f7'
+            : '#3b82f6'
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
       <div
         style={{
-          background: '#1e1e2e',
-          border: `1px solid ${getHeaderBorder(status)}`,
-          borderRadius: 8,
-          padding: '10px 12px',
+          padding: '8px 12px',
+          background: '#0c0c0c',
+          borderTop: `2px solid ${headerAccentColor}`,
+          border: '1px solid #1e1e1e',
+          borderTopColor: headerAccentColor,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
         }}
       >
         <div
           style={{
-            fontSize: 11,
-            color: '#64748b',
-            marginBottom: 4,
-            display: 'flex',
-            justifyContent: 'space-between',
-          }}
-        >
-          <span>
-            <StatusDot status={status} /> {TASK_STATUS_LABEL[status] ?? status}
-          </span>
-          {durationMs !== null && <span>{(durationMs / 1000).toFixed(1)}s</span>}
-        </div>
-
-        <div
-          style={{
-            fontSize: 13,
-            color: '#cbd5e1',
-            whiteSpace: 'nowrap',
+            fontSize: 12,
+            color: '#6b7280',
+            flex: 1,
             overflow: 'hidden',
+            whiteSpace: 'nowrap',
             textOverflow: 'ellipsis',
           }}
+          title={prompt}
         >
           {prompt}
         </div>
-
-        {stepCount > 0 && (
-          <div style={{ marginTop: 6, display: 'flex', gap: 10, fontSize: 11, color: '#64748b' }}>
-            <span style={{ color: '#22c55e' }}>{doneCount} done</span>
-            {failedCount > 0 && <span style={{ color: '#ef4444' }}>{failedCount} failed</span>}
-            <span>{stepCount} total</span>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {isActive && (
+            <span
+              style={{
+                display: 'inline-block',
+                width: 5,
+                height: 5,
+                background: '#3b82f6',
+                animation: 'pulse 1s ease-in-out infinite',
+              }}
+            />
+          )}
+          <span
+            style={{
+              fontSize: 11,
+              color: STATUS_COLOR[status] ?? '#666',
+              fontFamily: 'monospace',
+              letterSpacing: '0.03em',
+            }}
+          >
+            {TASK_STATUS_LABEL[status] ?? status}
+          </span>
+          {durationMs !== null && (
+            <span style={{ fontSize: 10, color: '#333', fontFamily: 'monospace' }}>
+              {(durationMs / 1000).toFixed(1)}s
+            </span>
+          )}
+        </div>
       </div>
 
+      {/* Steps */}
       {steps.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {steps.map((step) => {
-            const cfg = STATUS_STYLE[step.status] ?? STATUS_STYLE.pending
+        <div
+          style={{
+            border: '1px solid #1e1e1e',
+            borderTop: 'none',
+            background: '#090909',
+          }}
+        >
+          {steps.map((step, i) => {
+            const active = step.status === 'running' || step.status === 'awaiting_approval'
+            const statusColor = STATUS_COLOR[step.status] ?? '#2a2a2a'
+
             return (
               <div
                 key={step.index}
@@ -90,73 +271,84 @@ export function LiveTaskView({ state }: Props) {
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: 8,
-                  padding: '7px 10px',
-                  background: '#16162a',
-                  border: `1px solid ${cfg.color}22`,
-                  borderLeft: `3px solid ${step.status === 'running' ? cfg.color : `${cfg.color}55`}`,
-                  borderRadius: '0 6px 6px 0',
+                  padding: '6px 12px',
+                  borderBottom: i < steps.length - 1 ? '1px solid #0f0f0f' : 'none',
+                  borderLeft: `2px solid ${active ? statusColor : 'transparent'}`,
+                  background: active ? '#0d0d16' : 'transparent',
                 }}
               >
-                <span style={{ fontSize: 10, color: '#334155', minWidth: 16, paddingTop: 1 }}>
-                  {step.index + 1}
-                </span>
-
                 <span
                   style={{
                     fontSize: 10,
+                    color: '#242424',
+                    minWidth: 14,
+                    paddingTop: 1,
+                    textAlign: 'right',
+                    fontFamily: 'monospace',
                     flexShrink: 0,
-                    minWidth: 18,
-                    color: '#94a3b8',
-                    fontWeight: 700,
-                    letterSpacing: '0.04em',
                   }}
                 >
-                  {ACTION_ICONS[step.actionType] ?? '??'}
+                  {step.index + 1}
                 </span>
-
+                <span
+                  style={{
+                    color: active ? '#4b5563' : '#2a2a2a',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    paddingTop: 1,
+                  }}
+                >
+                  <ActionIcon type={step.actionType} />
+                </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
                       fontSize: 12,
-                      color: step.status === 'running' ? '#e2e8f0' : '#94a3b8',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      color: active ? '#d1d5db' : '#4b5563',
+                      lineHeight: 1.35,
                     }}
                   >
                     {step.description}
                   </div>
-
-                  {step.result && step.status === 'done' && (
+                  {step.result && step.status === 'done' && step.actionType !== 'extract' && (
                     <div
                       style={{
                         fontSize: 11,
-                        color: '#64748b',
+                        color: '#374151',
                         marginTop: 2,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        fontFamily: 'monospace',
                       }}
                     >
                       {step.result}
                     </div>
                   )}
-
                   {step.error && (
-                    <div style={{ fontSize: 11, color: '#ef4444', marginTop: 2 }}>{step.error}</div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: '#ef4444',
+                        marginTop: 2,
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {step.error}
+                    </div>
                   )}
                 </div>
-
                 <span
                   style={{
-                    fontSize: 10,
-                    color: cfg.color,
-                    fontWeight: 600,
+                    fontSize: 11,
                     flexShrink: 0,
                     paddingTop: 1,
+                    minWidth: 14,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
-                  {step.status === 'running' ? <Spinner /> : cfg.label}
+                  <StepStatusMark status={step.status} />
                 </span>
               </div>
             )
@@ -164,33 +356,99 @@ export function LiveTaskView({ state }: Props) {
         </div>
       )}
 
-      {status === 'streaming' && steps.length === 0 && (
+      {/* Thinking indicator */}
+      {isActive && steps.length === 0 && (
         <div
           style={{
+            padding: '8px 12px',
+            border: '1px solid #1e1e1e',
+            borderTop: 'none',
+            fontSize: 11,
+            color: '#374151',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            padding: '8px 12px',
-            background: '#1a1500',
-            border: '1px solid #f59e0b22',
-            borderRadius: 8,
-            fontSize: 12,
-            color: '#f59e0b',
+            background: '#090909',
           }}
         >
-          <Spinner /> Waiting for execution...
+          <DotSpinner />
+          {status === 'planning' ? 'Building plan…' : 'Connecting…'}
         </div>
       )}
 
+      {/* Extracted text output */}
+      {answer && (
+        <div
+          style={{
+            border: '1px solid #1e1e1e',
+            borderTop: 'none',
+          }}
+        >
+          <div
+            style={{
+              padding: '4px 12px',
+              fontSize: 10,
+              color: '#2a2a2a',
+              background: '#090909',
+              borderBottom: '1px solid #111',
+              fontFamily: 'monospace',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}
+          >
+            output
+          </div>
+          <div
+            style={{
+              padding: '10px 12px',
+              fontSize: 12,
+              color: '#9ca3af',
+              fontFamily: '"JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, monospace',
+              lineHeight: 1.65,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              background: '#070707',
+              maxHeight: 320,
+              overflowY: 'auto',
+            }}
+          >
+            {answer}
+          </div>
+        </div>
+      )}
+
+      {/* Summary footer */}
+      {isTerminal && steps.length > 0 && (
+        <div
+          style={{
+            padding: '4px 12px',
+            border: '1px solid #1e1e1e',
+            borderTop: 'none',
+            display: 'flex',
+            gap: 10,
+            fontSize: 10,
+            color: '#2a2a2a',
+            background: '#090909',
+            fontFamily: 'monospace',
+          }}
+        >
+          <span style={{ color: '#22c55e' }}>{doneCount} done</span>
+          {failedCount > 0 && <span style={{ color: '#ef4444' }}>{failedCount} failed</span>}
+          <span>{steps.length} total</span>
+        </div>
+      )}
+
+      {/* Error */}
       {error && (
         <div
           style={{
-            background: '#1a0a0a',
-            border: '1px solid #ef444433',
-            borderRadius: 8,
-            padding: '10px 12px',
+            padding: '8px 12px',
+            border: '1px solid #ef444430',
+            borderTop: 'none',
             fontSize: 12,
             color: '#ef4444',
+            fontFamily: 'monospace',
+            background: '#080505',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
           }}
@@ -202,66 +460,13 @@ export function LiveTaskView({ state }: Props) {
   )
 }
 
-function getHeaderBorder(status: StreamState['status']) {
-  if (status === 'done') return '#22c55e33'
-  if (status === 'failed' || status === 'error') return '#ef444433'
-  if (status === 'cancelled') return '#f59e0b33'
-  if (status === 'awaiting_approval') return '#a855f733'
-  return '#313150'
-}
+function buildAnswer(state: StreamState) {
+  const extracts = state.steps
+    .filter((s) => s.status === 'done' && s.actionType === 'extract' && s.result)
+    .map((s) => s.result!.trim())
+    .filter(Boolean)
 
-const TASK_STATUS_LABEL: Record<string, string> = {
-  idle: 'Idle',
-  submitting: 'Submitting...',
-  planning: 'Planning...',
-  streaming: 'Running',
-  done: 'Completed',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-  awaiting_approval: 'Awaiting approval',
-  error: 'Error',
-}
-
-function StatusDot({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    idle: '#475569',
-    submitting: '#f59e0b',
-    planning: '#f59e0b',
-    streaming: '#f59e0b',
-    done: '#22c55e',
-    failed: '#ef4444',
-    cancelled: '#f59e0b',
-    awaiting_approval: '#a855f7',
-    error: '#ef4444',
-  }
-
-  const color = colors[status] ?? '#475569'
-
-  return (
-    <span
-      style={{
-        display: 'inline-block',
-        width: 6,
-        height: 6,
-        borderRadius: '50%',
-        background: color,
-        marginRight: 4,
-        verticalAlign: 'middle',
-      }}
-    />
-  )
-}
-
-function Spinner() {
-  return (
-    <span
-      style={{
-        display: 'inline-block',
-        animation: 'spin 0.8s linear infinite',
-        fontSize: 12,
-      }}
-    >
-      O
-    </span>
-  )
+  if (extracts.length === 0) return ''
+  const unique = Array.from(new Set(extracts))
+  return unique.length === 1 ? unique[0] : unique.join('\n\n---\n\n')
 }

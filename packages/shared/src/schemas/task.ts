@@ -54,6 +54,9 @@ export const TaskContext = z.object({
   url: z.string().url().optional(),
   title: z.string().optional(),
   snapshot: CompactPageSnapshot.optional(),
+  text: z.string().optional(),
+  headings: z.array(z.string()).optional(),
+  textBlocks: z.array(z.string()).optional(),
 })
 export type TaskContext = z.infer<typeof TaskContext>
 

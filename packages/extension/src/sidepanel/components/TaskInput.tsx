@@ -27,51 +27,67 @@ export function TaskInput({ onSubmit, disabled }: Props) {
     }
   }
 
+  const canSubmit = Boolean(value.trim()) && !disabled
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        border: '1px solid #1e1e1e',
+        background: '#0c0c0c',
+      }}
+    >
       <textarea
         ref={textareaRef}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
         disabled={disabled}
-        placeholder="What should I do? e.g. Go to google.com and search for TypeScript tutorials"
+        placeholder="Tell me about this page, extract the heading, click sign in..."
         rows={3}
         style={{
-          resize: 'vertical',
-          background: '#1e1e2e',
-          border: '1px solid #313150',
-          borderRadius: 8,
-          color: '#e2e8f0',
+          resize: 'none',
+          background: 'transparent',
+          border: 'none',
+          borderBottom: '1px solid #1a1a1a',
+          color: '#d1d5db',
           fontSize: 13,
-          lineHeight: 1.5,
+          lineHeight: 1.55,
           padding: '10px 12px',
           width: '100%',
           outline: 'none',
           fontFamily: 'inherit',
-          transition: 'border-color 0.15s',
         }}
-        onFocus={(e) => (e.target.style.borderColor = '#6366f1')}
-        onBlur={(e) => (e.target.style.borderColor = '#313150')}
       />
-      <button
-        onClick={handleSubmit}
-        disabled={!value.trim() || disabled}
+      <div
         style={{
-          background: disabled || !value.trim() ? '#313150' : '#6366f1',
-          color: disabled || !value.trim() ? '#64748b' : '#fff',
-          border: 'none',
-          borderRadius: 8,
-          padding: '9px 16px',
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: disabled || !value.trim() ? 'not-allowed' : 'pointer',
-          transition: 'background 0.15s',
-          alignSelf: 'flex-end',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          padding: '6px 8px',
+          gap: 6,
         }}
       >
-        {disabled ? 'Running…' : 'Run Task ↵'}
-      </button>
+        <span style={{ fontSize: 10, color: '#2d2d2d' }}>⏎ to run</span>
+        <button
+          onClick={handleSubmit}
+          disabled={!canSubmit}
+          style={{
+            background: canSubmit ? '#1a1a1a' : 'transparent',
+            color: canSubmit ? '#e2e8f0' : '#2d2d2d',
+            border: `1px solid ${canSubmit ? '#2d2d2d' : '#141414'}`,
+            borderRadius: 2,
+            padding: '4px 12px',
+            fontSize: 12,
+            fontWeight: 500,
+            cursor: canSubmit ? 'pointer' : 'not-allowed',
+            letterSpacing: '0.01em',
+          }}
+        >
+          {disabled ? 'Running…' : 'Run →'}
+        </button>
+      </div>
     </div>
   )
 }

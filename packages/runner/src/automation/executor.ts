@@ -1,4 +1,4 @@
-import type { TaskPlan, TaskResult, ActionStep } from '@browser-automation/shared'
+import type { TaskPlan, TaskResult, ActionStep, TaskContext } from '@browser-automation/shared'
 import { runAction } from './actions/index.js'
 import { observe } from './observer.js'
 import { taskBus } from '../events/taskBus.js'
@@ -42,7 +42,7 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
     }
   }
 
-  const { page } = await ensureBrowserSession()
+  const { page } = await ensureBrowserSession(plan.context)
   const updatedSteps: ActionStep[] = plan.steps.map((s) => ({ ...s }))
 
   for (let i = 0; i < updatedSteps.length; i++) {
@@ -78,9 +78,12 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
       stepIndex: i,
       actionType: step.action.type,
       description: step.action.description,
+      selector: step.action.selector ?? undefined,
+      elementRef: step.action.elementRef ?? undefined,
+      targetLabel: resolveTargetLabel(plan.context, step),
     })
 
-    const result = await runAction(page, step.action, plan.context?.snapshot)
+    const result = await runAction(page, step.action, plan.context)
     const stepDuration = Date.now() - stepStart
 
     if (result.success) {
@@ -173,4 +176,26 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
     observation: finalObservation,
     durationMs,
   }
+}
+
+function resolveTargetLabel(context: TaskContext | undefined, step: ActionStep) {
+  if (!context?.snapshot || !step.action.elementRef) {
+    return step.action.selector ?? step.action.elementRef ?? step.action.value ?? undefined
+  }
+
+  const matchedElement =
+    context.snapshot.elements.find((element) => element.ref === step.action.elementRef) ??
+    context.snapshot.forms.flatMap((form) => form.fields).find((field) => field.ref === step.action.elementRef)
+
+  if (!matchedElement) {
+    return step.action.selector ?? step.action.elementRef ?? step.action.value ?? undefined
+  }
+
+  return (
+    matchedElement.label ??
+    matchedElement.name ??
+    ('text' in matchedElement ? matchedElement.text : undefined) ??
+    matchedElement.selector ??
+    step.action.elementRef
+  )
 }

@@ -39,6 +39,8 @@ Always include approvalReason when requiresApproval is true.
 - Only use goto when the user explicitly asks to open/navigate/visit a URL, or when no useful current page context exists.
 - If the task is about the current page (for example: "read the page", "extract the main heading", "summarize this", "fill this form"), stay on the current page and plan around the observed context.
 - For "read the page" or page understanding tasks, prefer extract steps against grounded selectors such as h1, main, article, [role="main"], or body.
+- For prompts like "tell me about this page", "what are we viewing", or "summarize what is on this page", prefer one or two compact extract steps grounded on the current page's main content or body. Do not create a brittle chain of separate h1/main/body extracts unless the snapshot clearly shows those regions.
+- If the current page does not clearly expose a visible h1 or main region, use the best available stable ref or fall back to body instead of guessing.
 - For form filling, use observed labels, names, placeholders, and refs from the compact snapshot. Prefer elementRef over selector when possible.
 - When a stable ref exists for a target button, link, input, textarea, select, heading, or main content region, include elementRef.
 - Keep plans short and executable. Do not add unnecessary screenshots or waits when the task does not need them.

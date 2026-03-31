@@ -27,6 +27,9 @@ export class OllamaPlanner implements IPlanner {
           model: this.options.model,
           stream: false,
           format: 'json',
+          options: {
+            temperature: 0,
+          },
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: userContent },

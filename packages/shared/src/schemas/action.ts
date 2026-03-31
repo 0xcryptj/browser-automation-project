@@ -45,17 +45,17 @@ export const Action = z.object({
   type: ActionType,
 
   // Navigation
-  url: z.string().url().optional(),
+  url: z.string().url().nullish(),
 
   // Element targeting
-  elementRef: z.string().optional(),
-  selector: z.string().optional(),
+  elementRef: z.string().nullish(),
+  selector: z.string().nullish(),
 
   // Input / value
-  value: z.string().optional(),
+  value: z.string().nullish(),
 
   // Keyboard
-  key: z.string().optional(),
+  key: z.string().nullish(),
 
   // Scroll
   direction: z.enum(['up', 'down', 'left', 'right']).optional(),
@@ -67,7 +67,7 @@ export const Action = z.object({
   sensitivity: ActionSensitivity.default('none'),
 
   /** Why this step requires approval (shown in approval modal) */
-  approvalReason: z.string().optional(),
+  approvalReason: z.string().nullish(),
 })
 
 export type Action = z.infer<typeof Action>

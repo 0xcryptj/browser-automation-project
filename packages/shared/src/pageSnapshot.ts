@@ -22,6 +22,14 @@ export function buildPageObservationScript(options?: Partial<ObservationOptions>
       return `e${++counters.element}`
     }
 
+    const markRef = (el: Element, ref: string) => {
+      try {
+        ;(el as HTMLElement).setAttribute('data-browser-automation-ref', ref)
+      } catch {
+        // Ignore pages that disallow DOM mutation on certain nodes.
+      }
+    }
+
     const isVisible = (el: Element) => {
       const html = el as HTMLElement
       const rect = html.getBoundingClientRect()
@@ -130,15 +138,18 @@ export function buildPageObservationScript(options?: Partial<ObservationOptions>
       .map((form, index) => {
         const formEl = form as HTMLFormElement
         const ref = nextRef('f')
+        markRef(form, ref)
         const selector = formEl.id ? `#${formEl.id}` : `form:nth-of-type(${index + 1})`
         const fields = Array.from(form.querySelectorAll('input:not([type="hidden"]), select, textarea'))
           .filter((field) => !opts.visibleOnly || isVisible(field))
           .slice(0, 20)
           .map((field) => {
+            const fieldRef = nextRef('e')
+            markRef(field, fieldRef)
             const input = field as HTMLInputElement
             const tag = field.tagName.toLowerCase()
             return {
-              ref: nextRef('e'),
+              ref: fieldRef,
               selector: selectorFor(field),
               name: input.name || undefined,
               id: input.id || undefined,
@@ -185,10 +196,12 @@ export function buildPageObservationScript(options?: Partial<ObservationOptions>
         const selector = selectorFor(el)
         if (seenSelectors.has(selector)) return null
         seenSelectors.add(selector)
+        const ref = nextRef('e')
+        markRef(el, ref)
         const tag = el.tagName.toLowerCase()
         const actionable = isActionable(el)
         return {
-          ref: nextRef('e'),
+          ref,
           kind: classify(el),
           selector,
           tag,
@@ -250,7 +263,11 @@ export function buildPageObservationScript(options?: Partial<ObservationOptions>
     )
       .filter((block) => !opts.visibleOnly || isVisible(block))
       .map((block) => ({
-        ref: nextRef('t'),
+        ref: (() => {
+          const ref = nextRef('t')
+          markRef(block, ref)
+          return ref
+        })(),
         selector: selectorFor(block),
         text: textOf(block, 220),
         region: regionFor(block),

@@ -15,6 +15,7 @@ class TaskBus extends EventEmitter {
       this.buffers.set(key, buf)
     }
     buf.events.push(event)
+    buf.createdAt = Date.now()
 
     this.emit('all', event)
     this.emit(`task:${key}`, event)
@@ -42,6 +43,23 @@ class TaskBus extends EventEmitter {
     const channel = `task:${taskId}`
     this.on(channel, handler)
     return () => this.off(channel, handler)
+  }
+
+  getEvents(taskId: string): TaskEvent[] {
+    const buffered = this.buffers.get(taskId)
+    return buffered ? [...buffered.events] : []
+  }
+
+  getRecentTasks(limit = 20): Array<{ taskId: string; eventCount: number; lastEventType: TaskEvent['type']; updatedAt: number }> {
+    return [...this.buffers.entries()]
+      .map(([taskId, buffer]) => ({
+        taskId,
+        eventCount: buffer.events.length,
+        lastEventType: buffer.events[buffer.events.length - 1]?.type ?? 'connected',
+        updatedAt: buffer.createdAt,
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, limit)
   }
 
   private prune() {

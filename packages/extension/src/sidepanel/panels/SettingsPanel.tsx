@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type {
+  BrowserConnectionConfigInput,
+  BrowserConnectionConfigPublic,
   ExtensionSettings,
   PlannerProviderConfigInput,
   PlannerProviderConfigPublic,
   UserProfile,
 } from '@browser-automation/shared'
-import { DEFAULT_OLLAMA_BASE_URL } from '@browser-automation/shared'
+import { DEFAULT_BROWSER_CDP_URL, DEFAULT_OLLAMA_BASE_URL } from '@browser-automation/shared'
 import { runnerClient } from '../../lib/runnerClient.js'
 import { getProfile, getSettings, saveProfile, saveSettings } from '../../lib/storage.js'
 
@@ -26,6 +28,10 @@ export function SettingsPanel() {
   const [settings, setSettings] = useState<ExtensionSettings | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [planner, setPlanner] = useState<PlannerProviderConfigPublic | null>(null)
+  const [browserSettings, setBrowserSettings] = useState<BrowserConnectionConfigPublic | null>(null)
+  const [browserDraft, setBrowserDraft] = useState<BrowserConnectionConfigInput>({
+    mode: 'launch',
+  })
   const [plannerDraft, setPlannerDraft] = useState<PlannerProviderConfigInput>({
     provider: 'mock',
   })
@@ -38,6 +44,7 @@ export function SettingsPanel() {
     void getSettings().then(setSettings)
     void getProfile().then(setProfile)
     void loadPlanner()
+    void loadBrowserSettings()
   }, [])
 
   const isProviderOffline = useMemo(() => !planner && !loadingPlanner, [planner, loadingPlanner])
@@ -61,10 +68,40 @@ export function SettingsPanel() {
     }
   }
 
+  async function loadBrowserSettings() {
+    try {
+      const nextBrowser = await runnerClient.getBrowserSettings()
+      setBrowserSettings(nextBrowser)
+      setBrowserDraft({
+        mode: nextBrowser.mode,
+        cdpUrl: nextBrowser.cdpUrl,
+      })
+      setError(null)
+    } catch (err) {
+      setBrowserSettings(null)
+      setError(err instanceof Error ? err.message : 'Runner browser settings are unavailable.')
+    }
+  }
+
   async function handleSettingsSave() {
     if (!settings) return
     await saveSettings(settings)
     flashSaved('Runner settings saved')
+  }
+
+  async function handleBrowserSave() {
+    try {
+      const nextBrowser = await runnerClient.saveBrowserSettings(browserDraft)
+      setBrowserSettings(nextBrowser)
+      setBrowserDraft({
+        mode: nextBrowser.mode,
+        cdpUrl: nextBrowser.cdpUrl,
+      })
+      setError(null)
+      flashSaved('Browser target settings saved locally')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Browser settings save failed.')
+    }
   }
 
   async function handleProviderSave() {
@@ -175,6 +212,67 @@ export function SettingsPanel() {
             value={settings.showObservationDebug}
             onChange={(value) => setSettings({ ...settings, showObservationDebug: value })}
           />
+
+          <div style={metaCardStyle}>
+            <div style={{ marginBottom: 8, color: '#cbd5e1', fontWeight: 600 }}>Browser Target</div>
+
+            <Field
+              label="Connection Mode"
+              hint="Attach mode lets the runner operate in your existing Brave or Chrome window instead of opening a separate Playwright browser."
+            >
+              <select
+                value={browserDraft.mode}
+                onChange={(e) =>
+                  setBrowserDraft({
+                    mode: e.target.value as BrowserConnectionConfigInput['mode'],
+                    cdpUrl:
+                      e.target.value === 'attach'
+                        ? browserDraft.cdpUrl || DEFAULT_BROWSER_CDP_URL
+                        : undefined,
+                  })
+                }
+                style={inputStyle}
+              >
+                <option value="launch">Launch isolated browser</option>
+                <option value="attach">Attach to Brave or Chrome</option>
+              </select>
+            </Field>
+
+            {browserDraft.mode === 'attach' && (
+              <Field
+                label="CDP URL"
+                hint="Example: brave.exe --remote-debugging-port=9222, then point this to http://127.0.0.1:9222"
+              >
+                <input
+                  type="url"
+                  value={browserDraft.cdpUrl ?? ''}
+                  onChange={(e) =>
+                    setBrowserDraft((current) => ({ ...current, cdpUrl: e.target.value || undefined }))
+                  }
+                  placeholder={DEFAULT_BROWSER_CDP_URL}
+                  style={inputStyle}
+                />
+              </Field>
+            )}
+
+            {browserSettings && (
+              <div style={{ ...infoCardStyle, marginTop: 10 }}>
+                <div>Mode: {browserSettings.mode}</div>
+                {browserSettings.cdpUrl && <div>CDP URL: {browserSettings.cdpUrl}</div>}
+                <div>Ready: {browserSettings.ready ? 'Yes' : 'No'}</div>
+                {browserSettings.warning && <div style={{ color: '#fbbf24', marginTop: 4 }}>{browserSettings.warning}</div>}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+              <button onClick={() => void handleBrowserSave()} style={secondaryButtonStyle}>
+                Save Browser Target
+              </button>
+              <button onClick={() => void loadBrowserSettings()} style={secondaryButtonStyle}>
+                Refresh Browser Status
+              </button>
+            </div>
+          </div>
 
           <button onClick={() => void handleSettingsSave()} style={saveButtonStyle}>
             Save Runner Settings

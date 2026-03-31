@@ -7,11 +7,11 @@ interface Props {
 }
 
 const SENSITIVITY: Record<ActionSensitivity, { color: string; label: string; icon: string }> = {
-  none:    { color: '#a855f7', label: 'Action',        icon: '⚠️' },
-  submit:  { color: '#f59e0b', label: 'Form Submit',   icon: '📤' },
-  delete:  { color: '#ef4444', label: 'Delete',        icon: '🗑️' },
-  payment: { color: '#ef4444', label: 'Payment',       icon: '💳' },
-  send:    { color: '#f59e0b', label: 'Send / Publish', icon: '📨' },
+  none: { color: '#a855f7', label: 'Action', icon: '!' },
+  submit: { color: '#f59e0b', label: 'Form Submit', icon: 'UP' },
+  delete: { color: '#ef4444', label: 'Delete', icon: 'DL' },
+  payment: { color: '#ef4444', label: 'Payment', icon: '$' },
+  send: { color: '#f59e0b', label: 'Send / Publish', icon: 'SN' },
 }
 
 export function ApprovalModal({ taskId, step, onApprove }: Props) {
@@ -42,18 +42,14 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
           boxShadow: `0 0 40px ${cfg.color}33`,
         }}
       >
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <span style={{ fontSize: 18 }}>{cfg.icon}</span>
+          <span style={{ fontSize: 16, color: cfg.color, fontWeight: 700, minWidth: 18 }}>{cfg.icon}</span>
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, color: '#e2e8f0' }}>Approval Required</div>
-            <div style={{ fontSize: 11, color: cfg.color, fontWeight: 600, marginTop: 1 }}>
-              {cfg.label}
-            </div>
+            <div style={{ fontSize: 11, color: cfg.color, fontWeight: 600, marginTop: 1 }}>{cfg.label}</div>
           </div>
         </div>
 
-        {/* Approval reason */}
         {step.action.approvalReason && (
           <div
             style={{
@@ -71,7 +67,6 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
           </div>
         )}
 
-        {/* Step detail */}
         <div
           style={{
             background: '#0f0f1a',
@@ -84,9 +79,17 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
           <div style={{ fontSize: 11, color: cfg.color, fontWeight: 600, marginBottom: 4 }}>
             Step {step.step + 1} · {step.action.type.toUpperCase()}
           </div>
-          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.4 }}>
-            {step.action.description}
-          </div>
+          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.4 }}>{step.action.description}</div>
+
+          {step.action.elementRef && (
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 5 }}>
+              Ref:{' '}
+              <code style={{ color: '#94a3b8', background: '#0a0a14', padding: '1px 4px', borderRadius: 3 }}>
+                {step.action.elementRef}
+              </code>
+            </div>
+          )}
+
           {step.action.selector && (
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 5 }}>
               Target:{' '}
@@ -95,6 +98,7 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
               </code>
             </div>
           )}
+
           {step.action.value && (
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>
               Value:{' '}
@@ -103,8 +107,18 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
               </code>
             </div>
           )}
+
           {step.action.url && (
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: '#64748b',
+                marginTop: 3,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               URL: <span style={{ color: '#94a3b8' }}>{step.action.url}</span>
             </div>
           )}

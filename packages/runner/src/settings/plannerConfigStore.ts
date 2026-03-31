@@ -97,12 +97,16 @@ export async function getResolvedPlannerConfig(): Promise<ResolvedPlannerConfig>
   }
 
   if (provider === 'ollama') {
+    const model = stored?.model || plannerEnvDefaults.ollama.model || DEFAULT_PROVIDER_MODELS.ollama
+    const baseUrl = stored?.baseUrl || plannerEnvDefaults.ollama.baseUrl || DEFAULT_OLLAMA_BASE_URL
+    const probe = await probeOllama(baseUrl, model)
     return {
       provider,
-      model: stored?.model || plannerEnvDefaults.ollama.model || DEFAULT_PROVIDER_MODELS.ollama,
-      baseUrl: stored?.baseUrl || plannerEnvDefaults.ollama.baseUrl || DEFAULT_OLLAMA_BASE_URL,
+      model,
+      baseUrl,
       source,
-      ready: true,
+      ready: probe.ready,
+      warning: probe.warning,
     }
   }
 
@@ -150,4 +154,68 @@ function redactSecret(secret?: string) {
   if (!secret) return undefined
   if (secret.length <= 8) return `${secret.slice(0, 2)}***`
   return `${secret.slice(0, 4)}...${secret.slice(-4)}`
+}
+
+async function probeOllama(baseUrl: string, model: string) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 1800)
+
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/tags`, {
+      method: 'GET',
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      return {
+        ready: false,
+        warning: `Ollama endpoint responded with ${response.status} ${response.statusText}.`,
+      }
+    }
+
+    const body = (await response.json()) as {
+      models?: Array<{ name?: string; model?: string }>
+    }
+
+    const availableModels = (body.models ?? [])
+      .map((entry) => entry.name ?? entry.model)
+      .filter((entry): entry is string => Boolean(entry))
+
+    if (availableModels.length === 0) {
+      return {
+        ready: false,
+        warning: 'Ollama is reachable, but no local models were reported.',
+      }
+    }
+
+    const normalizedTarget = normalizeModelName(model)
+    const hasModel = availableModels.some((entry) => normalizeModelName(entry) === normalizedTarget)
+
+    if (!hasModel) {
+      return {
+        ready: false,
+        warning: `Ollama is reachable, but model "${model}" is not installed. Available: ${availableModels.slice(0, 6).join(', ')}`,
+      }
+    }
+
+    return { ready: true as const }
+  } catch (error) {
+    const message =
+      error instanceof Error && error.name === 'AbortError'
+        ? 'Ollama endpoint timed out.'
+        : error instanceof Error
+          ? error.message
+          : String(error)
+
+    return {
+      ready: false,
+      warning: `Ollama endpoint is unreachable at ${baseUrl}: ${message}`,
+    }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function normalizeModelName(model: string) {
+  return model.trim().toLowerCase().replace(/:latest$/, '')
 }

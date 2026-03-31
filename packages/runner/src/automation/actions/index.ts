@@ -1,5 +1,5 @@
 import type { Locator, Page } from 'playwright'
-import type { Action, CompactPageSnapshot } from '@browser-automation/shared'
+import type { Action, CompactPageSnapshot, TaskContext } from '@browser-automation/shared'
 
 export type ActionResult = {
   success: boolean
@@ -8,7 +8,7 @@ export type ActionResult = {
   error?: string
 }
 
-type ActionHandler = (page: Page, action: Action, snapshot?: CompactPageSnapshot) => Promise<ActionResult>
+type ActionHandler = (page: Page, action: Action, context?: TaskContext) => Promise<ActionResult>
 
 const ok = (value?: string): ActionResult => ({ success: true, value })
 const fail = (error: string): ActionResult => ({ success: false, error })
@@ -21,25 +21,25 @@ export const actionHandlers: Record<string, ActionHandler> = {
     return ok(`Navigated to ${action.url}`)
   },
 
-  click: async (page, action, snapshot) => {
-    const target = resolveTarget(action, snapshot)
+  click: async (page, action, context) => {
+    const target = resolveTarget(action, context?.snapshot)
     if (!target.selector) return fail('click requires a selector or elementRef')
     const locator = await findFirstVisible(page, target.selector)
     await locator.click()
     return ok(`Clicked ${target.label}`)
   },
 
-  type: async (page, action, snapshot) => {
-    const target = resolveTarget(action, snapshot)
+  type: async (page, action, context) => {
+    const target = resolveTarget(action, context?.snapshot)
     if (!target.selector) return fail('type requires a selector or elementRef')
-    if (action.value === undefined) return fail('type requires a value')
+    if (action.value == null) return fail('type requires a value')
     const locator = await findFirstVisible(page, target.selector)
     await locator.fill(action.value)
     return ok(`Typed "${action.value}" into ${target.label}`)
   },
 
-  select: async (page, action, snapshot) => {
-    const target = resolveTarget(action, snapshot)
+  select: async (page, action, context) => {
+    const target = resolveTarget(action, context?.snapshot)
     if (!target.selector) return fail('select requires a selector or elementRef')
     if (!action.value) return fail('select requires a value')
     const locator = await findFirstVisible(page, target.selector)
@@ -60,17 +60,17 @@ export const actionHandlers: Record<string, ActionHandler> = {
     return ok(`Scrolled ${direction} by ${amount}px`)
   },
 
-  hover: async (page, action, snapshot) => {
-    const target = resolveTarget(action, snapshot)
+  hover: async (page, action, context) => {
+    const target = resolveTarget(action, context?.snapshot)
     if (!target.selector) return fail('hover requires a selector or elementRef')
     const locator = await findFirstVisible(page, target.selector)
     await locator.hover()
     return ok(`Hovered over ${target.label}`)
   },
 
-  press: async (page, action, snapshot) => {
+  press: async (page, action, context) => {
     if (!action.key) return fail('press requires a key')
-    const target = resolveTarget(action, snapshot)
+    const target = resolveTarget(action, context?.snapshot)
     if (target.selector) {
       const locator = await findFirstVisible(page, target.selector)
       await locator.press(action.key)
@@ -85,8 +85,8 @@ export const actionHandlers: Record<string, ActionHandler> = {
     return actionHandlers.press(page, action)
   },
 
-  wait_for_selector: async (page, action, snapshot) => {
-    const target = resolveTarget(action, snapshot)
+  wait_for_selector: async (page, action, context) => {
+    const target = resolveTarget(action, context?.snapshot)
     if (!target.selector) return fail('wait_for_selector requires a selector or elementRef')
     await findFirstVisible(page, target.selector, 15_000)
     return ok(`Selector "${target.label}" is visible`)
@@ -98,11 +98,9 @@ export const actionHandlers: Record<string, ActionHandler> = {
     return ok(`Text "${action.value}" found on page`)
   },
 
-  extract: async (page, action, snapshot) => {
-    const target = resolveTarget(action, snapshot, 'main, article, [role="main"], body')
-    const selector = target.selector ?? 'main, article, [role="main"], body'
-    const locator = await findFirstVisible(page, selector)
-    const text = ((await locator.innerText()).trim() || '').replace(/\s+/g, ' ').slice(0, 4000)
+  extract: async (page, action, context) => {
+    const target = resolveTarget(action, context?.snapshot, 'main, article, [role="main"], body')
+    const text = await extractText(page, target.selector, context, action.elementRef)
     return ok(text)
   },
 
@@ -113,11 +111,11 @@ export const actionHandlers: Record<string, ActionHandler> = {
   },
 }
 
-export async function runAction(page: Page, action: Action, snapshot?: CompactPageSnapshot): Promise<ActionResult> {
+export async function runAction(page: Page, action: Action, context?: TaskContext): Promise<ActionResult> {
   const handler = actionHandlers[action.type]
   if (!handler) return { success: false, error: `Unknown action type: ${action.type}` }
   try {
-    return await handler(page, action, snapshot)
+    return await handler(page, action, context)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return { success: false, error: message }
@@ -157,7 +155,7 @@ async function findFirstVisible(page: Page, selector: string, timeout = 10_000):
   throw lastError instanceof Error ? lastError : new Error(`No visible element found for ${selector}`)
 }
 
-function resolveTarget(action: Action, snapshot?: CompactPageSnapshot, fallbackSelector?: string) {
+function resolveTarget(action: Action, snapshot?: CompactPageSnapshot, fallbackSelector?: string | null) {
   const fromRef =
     action.elementRef && snapshot
       ? snapshot.elements.find((element) => element.ref === action.elementRef)
@@ -171,4 +169,179 @@ function resolveTarget(action: Action, snapshot?: CompactPageSnapshot, fallbackS
       : selector ?? action.elementRef ?? 'target'
 
   return { selector, label }
+}
+
+async function extractText(
+  page: Page,
+  selector: string | null | undefined,
+  context?: TaskContext,
+  elementRef?: string | null
+) {
+  const snapshot = context?.snapshot
+  const pageUrl = safeUrl(page.url())
+  const contextUrl = safeUrl(context?.url)
+  const preferObservedContext = shouldPreferObservedContext(pageUrl, contextUrl)
+
+  if (preferObservedContext) {
+    const observedText = extractFromObservedContext(selector, context, elementRef)
+    if (observedText) {
+      return observedText
+    }
+  }
+
+  if (selector === 'title') {
+    const title = (await page.title()).trim()
+    if (title) return normalizeText(title)
+  }
+
+  const candidates = (selector ?? 'main, article, [role="main"], body')
+    .split(',')
+    .map((candidate) => candidate.trim())
+    .filter(Boolean)
+
+  for (const candidate of candidates) {
+    const text = await extractWithFallbackLocator(page, candidate)
+    if (text) return text
+  }
+
+  const observedFallback = extractFromObservedContext(selector, context, elementRef)
+  if (observedFallback) {
+    return observedFallback
+  }
+
+  const bodyText = await page.evaluate(() =>
+    document.body?.innerText?.replace(/\s+/g, ' ').trim().slice(0, 4000) ?? ''
+  )
+
+  if (bodyText) {
+    return normalizeText(bodyText)
+  }
+
+  // Last resort: use ANY context text the extension collected, ignoring URL matching.
+  // This handles the case where observation exists but extractFromObservedContext
+  // returned nothing because the URL selector didn't match main/article/body.
+  const anyContextText =
+    context?.text?.trim() ||
+    context?.textBlocks?.join(' ')?.trim() ||
+    context?.snapshot?.visibleTextSummary?.trim() ||
+    (context?.headings?.length ? context.headings.join('. ') : '') ||
+    context?.title?.trim()
+
+  if (anyContextText) {
+    return normalizeText(anyContextText)
+  }
+
+  throw new Error(`Could not extract readable text from ${selector ?? 'the current page'}`)
+}
+
+async function extractWithFallbackLocator(page: Page, selector: string) {
+  try {
+    const text = await page.locator(selector).evaluateAll((nodes) => {
+      const normalize = (value: string) => value.replace(/\s+/g, ' ').trim().slice(0, 4000)
+      const isVisible = (node: Element) => {
+        const element = node as HTMLElement
+        const rect = element.getBoundingClientRect()
+        const style = window.getComputedStyle(element)
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none'
+      }
+
+      const preferred =
+        nodes.find((node) => isVisible(node) && normalize((node as HTMLElement).innerText || node.textContent || '').length > 0)
+        ?? nodes.find((node) => normalize((node as HTMLElement).innerText || node.textContent || '').length > 0)
+
+      if (!preferred) return ''
+
+      return normalize((preferred as HTMLElement).innerText || preferred.textContent || '')
+    })
+
+    return text ? normalizeText(text) : ''
+  } catch {
+    return ''
+  }
+}
+
+function normalizeText(value: string) {
+  return value.replace(/\s+/g, ' ').trim().slice(0, 4000)
+}
+
+function extractFromObservedContext(selector: string | null | undefined, context?: TaskContext, elementRef?: string | null) {
+  const snapshot = context?.snapshot
+  const normalizedSelector = (selector ?? '').trim().toLowerCase()
+
+  if (elementRef && snapshot) {
+    const snapshotElement =
+      snapshot.elements.find((element) => element.ref === elementRef)
+      ?? snapshot.forms.flatMap((form) => form.fields).find((field) => field.ref === elementRef)
+
+    const snapshotText =
+      'text' in (snapshotElement ?? {}) ? (snapshotElement as { text?: string }).text : undefined
+
+    if (snapshotText?.trim()) {
+      return normalizeText(snapshotText)
+    }
+  }
+
+  if (normalizedSelector === 'title' && context?.title?.trim()) {
+    return normalizeText(context.title)
+  }
+
+  if ((normalizedSelector === 'h1' || normalizedSelector.includes('h1')) && context?.headings?.[0]) {
+    return normalizeText(context.headings[0])
+  }
+
+  if (snapshot?.mainContentRef) {
+    const mainElement = snapshot.elements.find((element) => element.ref === snapshot.mainContentRef)
+    if (mainElement?.text?.trim() && isReadableSelector(normalizedSelector)) {
+      return normalizeText(mainElement.text)
+    }
+  }
+
+  if (snapshot?.visibleTextSummary?.trim() && isReadableSelector(normalizedSelector)) {
+    return normalizeText(snapshot.visibleTextSummary)
+  }
+
+  if (context?.textBlocks?.length && isReadableSelector(normalizedSelector)) {
+    return normalizeText(context.textBlocks.join(' '))
+  }
+
+  if (context?.text?.trim() && isReadableSelector(normalizedSelector)) {
+    return normalizeText(context.text)
+  }
+
+  return ''
+}
+
+function isReadableSelector(selector: string) {
+  return (
+    !selector ||
+    selector === 'body' ||
+    selector.includes('main') ||
+    selector.includes('article') ||
+    selector.includes('[role="main"]') ||
+    selector.includes('[role=main]')
+  )
+}
+
+function shouldPreferObservedContext(pageUrl: URL | null, contextUrl: URL | null) {
+  // If the runner's Playwright browser is on a blank or restricted page (about:blank,
+  // chrome://newtab, etc.) we can't extract anything useful from it — always fall back
+  // to whatever observation context the extension collected from the user's browser.
+  if (!pageUrl) return true
+  const nonPageProtocols = new Set(['about:', 'chrome:', 'edge:', 'brave:', 'chrome-extension:'])
+  if (nonPageProtocols.has(pageUrl.protocol)) return true
+
+  // Page is a real URL.  If we have no context URL to compare against, trust Playwright.
+  if (!contextUrl) return false
+
+  // Different pages: prefer the observation the extension already has.
+  return pageUrl.href !== contextUrl.href
+}
+
+function safeUrl(value?: string) {
+  if (!value) return null
+  try {
+    return new URL(value)
+  } catch {
+    return null
+  }
 }

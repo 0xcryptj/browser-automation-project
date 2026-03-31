@@ -14,11 +14,43 @@ export class MockPlanner implements IPlanner {
     const prompt = request.prompt.toLowerCase()
     const snapshot = request.observation?.snapshot
     const steps: ActionStep[] = []
+    // Reading-task detection: broad set of patterns plus generic "tell me / what is / describe"
+    // patterns followed by a page/site/website keyword.
+    const pageKeyword =
+      prompt.includes('this page') ||
+      prompt.includes('the page') ||
+      prompt.includes('this site') ||
+      prompt.includes('the site') ||
+      prompt.includes('this website') ||
+      prompt.includes('the website') ||
+      prompt.includes('this webpage') ||
+      prompt.includes('the webpage') ||
+      prompt.includes('this web page') ||
+      prompt.includes('the web page') ||
+      prompt.includes('we are viewing') ||
+      prompt.includes('we are looking at') ||
+      prompt.includes("we're viewing") ||
+      prompt.includes("we're looking at")
+
     const isReadingTask =
+      (prompt.startsWith('read ') && pageKeyword) ||
+      (prompt.startsWith('summarize ') && pageKeyword) ||
+      (prompt.startsWith('tell me') && pageKeyword) ||
+      (prompt.startsWith('what is') && pageKeyword) ||
+      (prompt.startsWith('what does') && pageKeyword) ||
+      (prompt.startsWith('what are') && pageKeyword) ||
+      (prompt.startsWith('describe ') && pageKeyword) ||
+      (prompt.startsWith('explain ') && pageKeyword) ||
+      (prompt.startsWith('show me') && pageKeyword) ||
       prompt.includes('read the page') ||
       prompt.includes('read this page') ||
-      prompt.includes('summarize this page') ||
-      prompt.includes('what is this page')
+      prompt.includes('read the current page') ||
+      prompt.includes('read the site') ||
+      prompt.includes('what is on this page') ||
+      prompt.includes('what does this page say') ||
+      prompt.includes('what are we viewing') ||
+      prompt.includes('what webpage are we on') ||
+      prompt.includes('what are we looking at')
 
     // ── URL navigation ───────────────────────────────────────────────────
     const urlMatch = request.prompt.match(/https?:\/\/[^\s]+/i)
@@ -120,7 +152,9 @@ export class MockPlanner implements IPlanner {
       }))
     }
 
-    if (isReadingTask && steps.length === 0) {
+    // Add extract step for reading tasks as long as one isn't already present.
+    // This allows "go to X and read the page" to navigate then extract.
+    if (isReadingTask && !steps.some((s) => s.action.type === 'extract')) {
       const readableTarget = inferReadableTarget(request)
       steps.push(makeStep(steps.length, {
         type: 'extract',
@@ -164,11 +198,14 @@ export class MockPlanner implements IPlanner {
             url: request.url ?? request.observation.url,
             title: request.title ?? request.observation.title,
             snapshot: request.observation.snapshot,
+            text: request.observation.text,
+            headings: request.observation.headings,
+            textBlocks: request.observation.textBlocks?.map((block) => block.text),
           }
         : {
             url: request.url,
             title: request.title,
-          },
+        },
       status: hasApproval ? 'awaiting_approval' : 'planned',
       summary: `${steps.length} steps planned for: "${request.prompt}"`,
       plannerUsed: this.name,
@@ -203,6 +240,21 @@ function makeStep(index: number, action: PartialAction): ActionStep {
 function inferExtractTarget(target: string, request: TaskRequest): { ref?: string; selector: string } {
   const normalized = target.trim().toLowerCase()
   const snapshot = request.observation?.snapshot
+
+  // Broad "all the text", "visible text", "page content", "page text" → main content
+  if (
+    normalized === 'visible text' ||
+    normalized === 'all text' ||
+    normalized === 'all the text' ||
+    normalized === 'page text' ||
+    normalized === 'page content' ||
+    normalized === 'the page' ||
+    normalized === 'this page' ||
+    normalized === 'the webpage' ||
+    normalized === 'this webpage'
+  ) {
+    return inferReadableTarget(request)
+  }
 
   if (normalized === 'main heading' || normalized === 'heading' || normalized === 'headline') {
     const heading = findElementRef(snapshot, normalized, ['text'])

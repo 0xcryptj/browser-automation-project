@@ -1,4 +1,5 @@
 export * from './schemas/action.ts'
+export * from './schemas/browser.ts'
 export * from './schemas/events.ts'
 export * from './schemas/observation.ts'
 export * from './schemas/profile.ts'

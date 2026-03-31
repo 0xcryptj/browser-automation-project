@@ -5,8 +5,11 @@
 import type {
   TaskRequest,
   TaskResult,
+  TaskEvent,
   ImportantInfoExtraction,
   PageObservation,
+  BrowserConnectionConfigInput,
+  BrowserConnectionConfigPublic,
   PlannerProviderConfigInput,
   PlannerProviderConfigPublic,
 } from '@browser-automation/shared'
@@ -20,6 +23,7 @@ async function getBase(): Promise<string> {
 export type RunnerHealth = {
   status: string
   planner: PlannerProviderConfigPublic
+  browserTarget?: BrowserConnectionConfigPublic
   version: string
   browser?: {
     browserConnected: boolean
@@ -27,6 +31,20 @@ export type RunnerHealth = {
     pageOpen: boolean
     pageCount: number
     activePageUrl: string | null
+  }
+}
+
+export type RunnerDebugStatus = RunnerHealth & {
+  recentTasks?: Array<{
+    taskId: string
+    eventCount: number
+    lastEventType: string
+    updatedAt: number
+  }>
+  runner?: {
+    host: string
+    port: number
+    headless: boolean
   }
 }
 
@@ -45,6 +63,18 @@ export const runnerClient = {
     return r.json()
   },
 
+  async getTaskEvents(taskId: string): Promise<{
+    taskId: string
+    status: string | null
+    plannerUsed: string | null
+    events: TaskEvent[]
+  }> {
+    const base = await getBase()
+    const r = await fetch(`${base}/task/${taskId}/events`)
+    if (!r.ok) throw new Error(`Task events lookup failed at ${base}: ${r.status}`)
+    return r.json()
+  },
+
   async submitTask(task: Omit<TaskRequest, never>): Promise<{ taskId: string; plan: TaskResult['plan'] }> {
     const base = await getBase()
     const r = await fetch(`${base}/task`, {
@@ -54,7 +84,20 @@ export const runnerClient = {
     })
     if (!r.ok) {
       const err = await r.json().catch(() => ({ error: r.statusText }))
-      throw new Error(err.error ?? `Task submission failed at ${base}: ${r.status}`)
+      // Attach Zod validation details when present so the user sees what failed.
+      const issues = Array.isArray(err.issues)
+        ? (err.issues as Array<{ path: unknown[]; message: string }>)
+            .slice(0, 4)
+            .map((i) => {
+              const path = i.path?.join?.('.') || ''
+              return path ? `${path}: ${i.message}` : i.message
+            })
+            .join('; ')
+        : ''
+      const message = issues
+        ? `Request rejected — ${issues}`
+        : err.error ?? `Task submission failed: ${r.status}`
+      throw new Error(message)
     }
     return r.json()
   },
@@ -97,6 +140,21 @@ export const runnerClient = {
     return data.planner
   },
 
+  async getBrowserSettings(): Promise<BrowserConnectionConfigPublic> {
+    const base = await getBase()
+    const r = await fetch(`${base}/settings/browser`)
+    if (!r.ok) throw new Error(`Browser settings lookup failed at ${base}: ${r.status}`)
+    const data = (await r.json()) as { browser: BrowserConnectionConfigPublic }
+    return data.browser
+  },
+
+  async debugStatus(): Promise<RunnerDebugStatus> {
+    const base = await getBase()
+    const r = await fetch(`${base}/debug/status`)
+    if (!r.ok) throw new Error(`Runner debug status failed at ${base}: ${r.status}`)
+    return r.json()
+  },
+
   async savePlannerSettings(settings: PlannerProviderConfigInput): Promise<PlannerProviderConfigPublic> {
     const base = await getBase()
     const r = await fetch(`${base}/settings/planner`, {
@@ -110,6 +168,21 @@ export const runnerClient = {
     }
     const data = (await r.json()) as { planner: PlannerProviderConfigPublic }
     return data.planner
+  },
+
+  async saveBrowserSettings(settings: BrowserConnectionConfigInput): Promise<BrowserConnectionConfigPublic> {
+    const base = await getBase()
+    const r = await fetch(`${base}/settings/browser`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    })
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: r.statusText }))
+      throw new Error(err.error ?? `Browser settings save failed at ${base}: ${r.status}`)
+    }
+    const data = (await r.json()) as { browser: BrowserConnectionConfigPublic }
+    return data.browser
   },
 
   async clearPlannerSecret(): Promise<PlannerProviderConfigPublic> {

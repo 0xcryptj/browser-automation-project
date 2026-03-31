@@ -23,6 +23,8 @@ const schema = z.object({
   OLLAMA_MODEL: z.string().trim().default('llama3.1'),
   ASSIST_MODEL: z.string().trim().optional(),
   RUNNER_CONFIG_PATH: z.string().trim().optional(),
+  BROWSER_CONNECTION_MODE: z.enum(['launch', 'attach']).default('launch'),
+  BROWSER_CDP_URL: z.string().trim().url().default('http://127.0.0.1:9222'),
 })
 
 const result = schema.safeParse({
@@ -47,6 +49,8 @@ export const config = {
   SLOW_MO: result.data.SLOW_MO,
   ASSIST_MODEL: result.data.ASSIST_MODEL,
   RUNNER_CONFIG_PATH: result.data.RUNNER_CONFIG_PATH,
+  BROWSER_CONNECTION_MODE: result.data.BROWSER_CONNECTION_MODE,
+  BROWSER_CDP_URL: result.data.BROWSER_CDP_URL,
 }
 
 export const plannerEnvDefaults = {
