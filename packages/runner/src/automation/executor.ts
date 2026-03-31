@@ -3,13 +3,14 @@ import { chromium } from 'playwright'
 import type { TaskPlan, TaskResult, ActionStep } from '@browser-automation/shared'
 import { runAction } from './actions/index.js'
 import { observe } from './observer.js'
+import { taskBus } from '../events/taskBus.js'
 
 let browser: Browser | null = null
 let context: BrowserContext | null = null
 
 export async function getBrowser(): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
   if (!browser || !browser.isConnected()) {
-    browser = await chromium.launch({ headless: false, slowMo: 80 })
+    browser = await chromium.launch({ headless: false, slowMo: 60 })
   }
   if (!context) {
     context = await browser.newContext({
@@ -30,37 +31,66 @@ export async function closeBrowser(): Promise<void> {
   browser = null
 }
 
-/**
- * Observe → Plan (already done) → Execute → Verify → Recover
- */
 export async function execute(plan: TaskPlan): Promise<TaskResult> {
   const startTime = Date.now()
-  const { page } = await getBrowser()
-  const updatedSteps: ActionStep[] = [...plan.steps]
 
-  // If a step needs approval, stop before executing it and return awaiting_approval
-  const approvalIndex = updatedSteps.findIndex(
+  taskBus.publish({ type: 'task_started', taskId: plan.id, prompt: plan.prompt })
+  taskBus.publish({
+    type: 'plan_created',
+    taskId: plan.id,
+    stepCount: plan.steps.length,
+    summary: plan.summary,
+  })
+
+  // If any step needs approval before we even start, pause and return
+  const firstApprovalIndex = plan.steps.findIndex(
     (s) => s.action.requiresApproval && s.status === 'pending'
   )
-  if (approvalIndex !== -1) {
-    const blockedPlan: TaskPlan = {
-      ...plan,
-      steps: updatedSteps,
-      status: 'awaiting_approval',
-    }
+  if (firstApprovalIndex !== -1) {
+    taskBus.publish({
+      type: 'approval_required',
+      taskId: plan.id,
+      stepIndex: firstApprovalIndex,
+      action: plan.steps[firstApprovalIndex].action,
+    })
     return {
       taskId: plan.id,
-      plan: blockedPlan,
+      plan: { ...plan, status: 'awaiting_approval' },
       durationMs: Date.now() - startTime,
     }
   }
 
+  const { page } = await getBrowser()
+  const updatedSteps: ActionStep[] = plan.steps.map((s) => ({ ...s }))
+
   for (let i = 0; i < updatedSteps.length; i++) {
     const step = updatedSteps[i]
-
     if (step.status !== 'pending') continue
 
+    // Approval gate mid-execution
+    if (step.action.requiresApproval) {
+      updatedSteps[i] = { ...step, status: 'awaiting_approval' }
+      taskBus.publish({
+        type: 'approval_required',
+        taskId: plan.id,
+        stepIndex: i,
+        action: step.action,
+      })
+      return {
+        taskId: plan.id,
+        plan: { ...plan, steps: updatedSteps, status: 'awaiting_approval' },
+        durationMs: Date.now() - startTime,
+      }
+    }
+
     updatedSteps[i] = { ...step, status: 'running' }
+    taskBus.publish({
+      type: 'step_started',
+      taskId: plan.id,
+      stepIndex: i,
+      actionType: step.action.type,
+      description: step.action.description,
+    })
 
     const result = await runAction(page, step.action)
 
@@ -71,38 +101,44 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
         result: result.value,
         screenshot: result.screenshot,
       }
+      taskBus.publish({
+        type: 'step_succeeded',
+        taskId: plan.id,
+        stepIndex: i,
+        result: result.value,
+        hasScreenshot: Boolean(result.screenshot),
+      })
     } else {
-      // ── Recover: log and continue (don't abort the whole plan) ──────────
-      updatedSteps[i] = {
-        ...step,
-        status: 'failed',
-        error: result.error,
-      }
+      updatedSteps[i] = { ...step, status: 'failed', error: result.error }
+      taskBus.publish({
+        type: 'step_failed',
+        taskId: plan.id,
+        stepIndex: i,
+        error: result.error ?? 'Unknown error',
+      })
       console.warn(`[executor] Step ${i} failed: ${result.error}`)
-      // Only abort if it's a navigation step — others can be non-fatal
-      if (step.action.type === 'goto') break
+      if (step.action.type === 'goto') break // navigation failures are fatal
     }
   }
 
-  // ── Verify: observe final state ────────────────────────────────────────
+  // Verify: observe final page state
   let finalObservation
   try {
     finalObservation = await observe(page, false)
   } catch {
-    // page may have closed
+    // page may have closed; non-fatal
   }
 
   const anyFailed = updatedSteps.some((s) => s.status === 'failed')
-  const allDone = updatedSteps.every((s) => s.status === 'done' || s.status === 'skipped')
+  const finalStatus = anyFailed ? 'failed' : 'done'
+  const durationMs = Date.now() - startTime
+
+  taskBus.publish({ type: 'task_completed', taskId: plan.id, status: finalStatus, durationMs })
 
   return {
     taskId: plan.id,
-    plan: {
-      ...plan,
-      steps: updatedSteps,
-      status: allDone ? 'done' : anyFailed ? 'failed' : 'done',
-    },
+    plan: { ...plan, steps: updatedSteps, status: finalStatus },
     observation: finalObservation,
-    durationMs: Date.now() - startTime,
+    durationMs,
   }
 }
