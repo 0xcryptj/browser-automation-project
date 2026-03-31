@@ -1,17 +1,17 @@
 import type { StreamState } from '../hooks/useTaskStream.js'
 
 const ACTION_ICONS: Record<string, string> = {
-  goto: '🌐',
-  click: '🖱️',
-  type: '⌨️',
-  select: '📋',
-  scroll: '↕️',
-  hover: '👆',
-  press: '⌨️',
-  wait_for_selector: '⏳',
-  wait_for_text: '⏳',
-  extract: '📤',
-  screenshot: '📸',
+  goto: 'GL',
+  click: 'CL',
+  type: 'TY',
+  select: 'SE',
+  scroll: 'SC',
+  hover: 'HO',
+  press: 'PR',
+  wait_for_selector: 'WT',
+  wait_for_text: 'WT',
+  extract: 'EX',
+  screenshot: 'SS',
 }
 
 const STATUS_STYLE: Record<string, { color: string; label: string }> = {
@@ -30,24 +30,15 @@ interface Props {
 export function LiveTaskView({ state }: Props) {
   const { status, steps, stepCount, durationMs, error, prompt } = state
 
-  const doneCount = steps.filter((s) => s.status === 'done').length
-  const failedCount = steps.filter((s) => s.status === 'failed').length
+  const doneCount = steps.filter((step) => step.status === 'done').length
+  const failedCount = steps.filter((step) => step.status === 'failed').length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* Task header */}
       <div
         style={{
           background: '#1e1e2e',
-          border: `1px solid ${
-            status === 'done'
-              ? '#22c55e33'
-              : status === 'failed' || status === 'error'
-              ? '#ef444433'
-              : status === 'awaiting_approval'
-              ? '#a855f733'
-              : '#313150'
-          }`,
+          border: `1px solid ${getHeaderBorder(status)}`,
           borderRadius: 8,
           padding: '10px 12px',
         }}
@@ -64,10 +55,9 @@ export function LiveTaskView({ state }: Props) {
           <span>
             <StatusDot status={status} /> {TASK_STATUS_LABEL[status] ?? status}
           </span>
-          {durationMs !== null && (
-            <span>{(durationMs / 1000).toFixed(1)}s</span>
-          )}
+          {durationMs !== null && <span>{(durationMs / 1000).toFixed(1)}s</span>}
         </div>
+
         <div
           style={{
             fontSize: 13,
@@ -79,6 +69,7 @@ export function LiveTaskView({ state }: Props) {
         >
           {prompt}
         </div>
+
         {stepCount > 0 && (
           <div style={{ marginTop: 6, display: 'flex', gap: 10, fontSize: 11, color: '#64748b' }}>
             <span style={{ color: '#22c55e' }}>{doneCount} done</span>
@@ -88,7 +79,6 @@ export function LiveTaskView({ state }: Props) {
         )}
       </div>
 
-      {/* Steps timeline */}
       {steps.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {steps.map((step) => {
@@ -103,22 +93,27 @@ export function LiveTaskView({ state }: Props) {
                   padding: '7px 10px',
                   background: '#16162a',
                   border: `1px solid ${cfg.color}22`,
-                  borderLeft: `3px solid ${step.status === 'running' ? cfg.color : cfg.color + '55'}`,
+                  borderLeft: `3px solid ${step.status === 'running' ? cfg.color : `${cfg.color}55`}`,
                   borderRadius: '0 6px 6px 0',
-                  transition: 'border-color 0.2s',
                 }}
               >
-                {/* Step number */}
                 <span style={{ fontSize: 10, color: '#334155', minWidth: 16, paddingTop: 1 }}>
                   {step.index + 1}
                 </span>
 
-                {/* Icon */}
-                <span style={{ fontSize: 13, flexShrink: 0 }}>
-                  {ACTION_ICONS[step.actionType] ?? '▸'}
+                <span
+                  style={{
+                    fontSize: 10,
+                    flexShrink: 0,
+                    minWidth: 18,
+                    color: '#94a3b8',
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {ACTION_ICONS[step.actionType] ?? '??'}
                 </span>
 
-                {/* Content */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
@@ -148,13 +143,10 @@ export function LiveTaskView({ state }: Props) {
                   )}
 
                   {step.error && (
-                    <div style={{ fontSize: 11, color: '#ef4444', marginTop: 2 }}>
-                      {step.error}
-                    </div>
+                    <div style={{ fontSize: 11, color: '#ef4444', marginTop: 2 }}>{step.error}</div>
                   )}
                 </div>
 
-                {/* Status */}
                 <span
                   style={{
                     fontSize: 10,
@@ -172,7 +164,6 @@ export function LiveTaskView({ state }: Props) {
         </div>
       )}
 
-      {/* Streaming indicator (before any steps appear) */}
       {status === 'streaming' && steps.length === 0 && (
         <div
           style={{
@@ -187,11 +178,10 @@ export function LiveTaskView({ state }: Props) {
             color: '#f59e0b',
           }}
         >
-          <Spinner /> Planning…
+          <Spinner /> Waiting for execution...
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div
           style={{
@@ -201,6 +191,8 @@ export function LiveTaskView({ state }: Props) {
             padding: '10px 12px',
             fontSize: 12,
             color: '#ef4444',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
           }}
         >
           {error}
@@ -210,12 +202,22 @@ export function LiveTaskView({ state }: Props) {
   )
 }
 
+function getHeaderBorder(status: StreamState['status']) {
+  if (status === 'done') return '#22c55e33'
+  if (status === 'failed' || status === 'error') return '#ef444433'
+  if (status === 'cancelled') return '#f59e0b33'
+  if (status === 'awaiting_approval') return '#a855f733'
+  return '#313150'
+}
+
 const TASK_STATUS_LABEL: Record<string, string> = {
   idle: 'Idle',
-  submitting: 'Submitting…',
+  submitting: 'Submitting...',
+  planning: 'Planning...',
   streaming: 'Running',
   done: 'Completed',
   failed: 'Failed',
+  cancelled: 'Cancelled',
   awaiting_approval: 'Awaiting approval',
   error: 'Error',
 }
@@ -224,13 +226,17 @@ function StatusDot({ status }: { status: string }) {
   const colors: Record<string, string> = {
     idle: '#475569',
     submitting: '#f59e0b',
+    planning: '#f59e0b',
     streaming: '#f59e0b',
     done: '#22c55e',
     failed: '#ef4444',
+    cancelled: '#f59e0b',
     awaiting_approval: '#a855f7',
     error: '#ef4444',
   }
+
   const color = colors[status] ?? '#475569'
+
   return (
     <span
       style={{
@@ -255,7 +261,7 @@ function Spinner() {
         fontSize: 12,
       }}
     >
-      ⟳
+      O
     </span>
   )
 }

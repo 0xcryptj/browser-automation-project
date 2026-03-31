@@ -7,7 +7,8 @@ export const ActionType = z.enum([
   'select',
   'scroll',
   'hover',
-  'press',
+  'pressKey',   // renamed from 'press' for clarity; 'press' kept as alias
+  'press',      // legacy alias
   'wait_for_selector',
   'wait_for_text',
   'extract',
@@ -16,7 +17,17 @@ export const ActionType = z.enum([
 
 export type ActionType = z.infer<typeof ActionType>
 
-// Actions that require explicit user approval before execution
+/** Sensitivity level for an action — drives approval UI copy */
+export const ActionSensitivity = z.enum([
+  'none',
+  'submit',    // form submission
+  'delete',    // destructive delete / remove
+  'payment',   // financial action
+  'send',      // send / publish / post
+])
+export type ActionSensitivity = z.infer<typeof ActionSensitivity>
+
+/** Keywords that automatically set requiresApproval: true */
 export const SENSITIVE_ACTION_KEYWORDS = [
   'submit',
   'delete',
@@ -32,20 +43,31 @@ export const SENSITIVE_ACTION_KEYWORDS = [
 
 export const Action = z.object({
   type: ActionType,
+
   // Navigation
   url: z.string().url().optional(),
+
   // Element targeting
+  elementRef: z.string().optional(),
   selector: z.string().optional(),
+
   // Input / value
   value: z.string().optional(),
+
   // Keyboard
   key: z.string().optional(),
+
   // Scroll
   direction: z.enum(['up', 'down', 'left', 'right']).optional(),
   amount: z.number().int().positive().optional(),
+
   // Metadata
   description: z.string(),
   requiresApproval: z.boolean().default(false),
+  sensitivity: ActionSensitivity.default('none'),
+
+  /** Why this step requires approval (shown in approval modal) */
+  approvalReason: z.string().optional(),
 })
 
 export type Action = z.infer<typeof Action>

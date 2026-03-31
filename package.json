@@ -7,7 +7,8 @@
     "runner:start": "pnpm --filter @browser-automation/runner start",
     "extension:dev": "pnpm --filter @browser-automation/extension dev",
     "extension:build": "pnpm --filter @browser-automation/extension build",
-    "build": "pnpm -r --filter @browser-automation/shared build && pnpm -r --filter '!@browser-automation/shared' build",
+    "typecheck": "pnpm --filter @browser-automation/shared build && pnpm --filter @browser-automation/runner build && pnpm exec tsc --noEmit -p packages/extension/tsconfig.json",
+    "build": "pnpm run typecheck && pnpm --filter @browser-automation/extension build",
     "install:playwright": "pnpm --filter @browser-automation/runner exec playwright install chromium"
   },
   "devDependencies": {

@@ -16,6 +16,7 @@ class TaskBus extends EventEmitter {
     }
     buf.events.push(event)
 
+    this.emit('all', event)
     this.emit(`task:${key}`, event)
 
     // Prune stale buffers periodically

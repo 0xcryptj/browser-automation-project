@@ -1,22 +1,31 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
-import { copyFileSync } from 'fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync } from 'fs'
+
+function copyExtensionAssets() {
+  return {
+    name: 'copy-extension-assets',
+    writeBundle() {
+      const distDir = resolve(__dirname, 'dist')
+      const manifestSource = resolve(__dirname, 'manifest.json')
+      const manifestTarget = resolve(distDir, 'manifest.json')
+      const iconsSource = resolve(__dirname, 'icons')
+      const iconsTarget = resolve(distDir, 'icons')
+
+      mkdirSync(distDir, { recursive: true })
+      copyFileSync(manifestSource, manifestTarget)
+
+      if (existsSync(iconsSource)) {
+        cpSync(iconsSource, iconsTarget, { recursive: true })
+      }
+    },
+  }
+}
 
 export default defineConfig({
-  plugins: [
-    react(),
-    // Copy manifest.json into dist after every build
-    {
-      name: 'copy-extension-assets',
-      writeBundle() {
-        copyFileSync(
-          resolve(__dirname, 'manifest.json'),
-          resolve(__dirname, 'dist/manifest.json')
-        )
-      },
-    },
-  ],
+  base: './',
+  plugins: [react(), copyExtensionAssets()],
   build: {
     target: 'chrome112',
     outDir: 'dist',
@@ -29,7 +38,6 @@ export default defineConfig({
         'content-script': resolve(__dirname, 'src/content/content-script.ts'),
       },
       output: {
-        // background.js and content-script.js must be flat files
         entryFileNames: (chunk) => {
           if (chunk.name === 'background' || chunk.name === 'content-script') {
             return '[name].js'

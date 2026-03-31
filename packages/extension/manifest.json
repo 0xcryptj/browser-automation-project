@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Browser Automation Assistant",
   "version": "0.1.0",
-  "description": "Local-first AI browser automation — runs entirely on localhost.",
+  "description": "Local-first AI browser automation - runs entirely on localhost.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -11,8 +11,8 @@
     "tabs"
   ],
   "host_permissions": [
-    "http://localhost:3000/*",
-    "http://127.0.0.1:3000/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
     "<all_urls>"
   ],
   "background": {

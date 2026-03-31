@@ -5,6 +5,7 @@ const CONFIG: Record<string, { label: string; color: string }> = {
   running: { label: 'Running…', color: '#f59e0b' },
   done: { label: 'Done', color: '#22c55e' },
   failed: { label: 'Failed', color: '#ef4444' },
+  cancelled: { label: 'Cancelled', color: '#f59e0b' },
   awaiting_approval: { label: 'Needs Approval', color: '#a855f7' },
   skipped: { label: 'Skipped', color: '#94a3b8' },
   planned: { label: 'Planned', color: '#3b82f6' },

@@ -1,38 +1,19 @@
-import type { Browser, BrowserContext, Page } from 'playwright'
-import { chromium } from 'playwright'
 import type { TaskPlan, TaskResult, ActionStep } from '@browser-automation/shared'
 import { runAction } from './actions/index.js'
 import { observe } from './observer.js'
 import { taskBus } from '../events/taskBus.js'
+import { ensureBrowserSession } from './browserManager.js'
 
-let browser: Browser | null = null
-let context: BrowserContext | null = null
-
-export async function getBrowser(): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
-  if (!browser || !browser.isConnected()) {
-    browser = await chromium.launch({ headless: false, slowMo: 60 })
-  }
-  if (!context) {
-    context = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-    })
-  }
-  const pages = context.pages()
-  const page = pages.length > 0 ? pages[pages.length - 1] : await context.newPage()
-  return { browser, context, page }
-}
-
-export async function closeBrowser(): Promise<void> {
-  await context?.close()
-  await browser?.close()
-  context = null
-  browser = null
-}
+/** Track cancelled tasks to stop mid-execution */
+const cancelledTasks = new Set<string>()
+taskBus.on('all', (event: { type: string; taskId: string }) => {
+  if (event.type === 'task_cancelled') cancelledTasks.add(event.taskId)
+})
 
 export async function execute(plan: TaskPlan): Promise<TaskResult> {
   const startTime = Date.now()
+  cancelledTasks.delete(plan.id) // reset on fresh execution
+  console.info(`[task:${plan.id}] started prompt=${JSON.stringify(plan.prompt.slice(0, 120))}`)
 
   taskBus.publish({ type: 'task_started', taskId: plan.id, prompt: plan.prompt })
   taskBus.publish({
@@ -40,9 +21,10 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
     taskId: plan.id,
     stepCount: plan.steps.length,
     summary: plan.summary,
+    plannerUsed: plan.plannerUsed,
   })
 
-  // If any step needs approval before we even start, pause and return
+  // Pre-execution approval gate
   const firstApprovalIndex = plan.steps.findIndex(
     (s) => s.action.requiresApproval && s.status === 'pending'
   )
@@ -60,14 +42,19 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
     }
   }
 
-  const { page } = await getBrowser()
+  const { page } = await ensureBrowserSession()
   const updatedSteps: ActionStep[] = plan.steps.map((s) => ({ ...s }))
 
   for (let i = 0; i < updatedSteps.length; i++) {
+    // Check for cancellation
+    if (cancelledTasks.has(plan.id)) {
+      break
+    }
+
     const step = updatedSteps[i]
     if (step.status !== 'pending') continue
 
-    // Approval gate mid-execution
+    // Mid-execution approval gate
     if (step.action.requiresApproval) {
       updatedSteps[i] = { ...step, status: 'awaiting_approval' }
       taskBus.publish({
@@ -83,6 +70,7 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
       }
     }
 
+    const stepStart = Date.now()
     updatedSteps[i] = { ...step, status: 'running' }
     taskBus.publish({
       type: 'step_started',
@@ -92,7 +80,8 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
       description: step.action.description,
     })
 
-    const result = await runAction(page, step.action)
+    const result = await runAction(page, step.action, plan.context?.snapshot)
+    const stepDuration = Date.now() - stepStart
 
     if (result.success) {
       updatedSteps[i] = {
@@ -100,6 +89,7 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
         status: 'done',
         result: result.value,
         screenshot: result.screenshot,
+        durationMs: stepDuration,
       }
       taskBus.publish({
         type: 'step_succeeded',
@@ -107,17 +97,20 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
         stepIndex: i,
         result: result.value,
         hasScreenshot: Boolean(result.screenshot),
+        durationMs: stepDuration,
       })
     } else {
-      updatedSteps[i] = { ...step, status: 'failed', error: result.error }
+      updatedSteps[i] = { ...step, status: 'failed', error: result.error, durationMs: stepDuration }
       taskBus.publish({
         type: 'step_failed',
         taskId: plan.id,
         stepIndex: i,
         error: result.error ?? 'Unknown error',
+        retrying: false,
       })
       console.warn(`[executor] Step ${i} failed: ${result.error}`)
-      if (step.action.type === 'goto') break // navigation failures are fatal
+      // Navigation failures are fatal; others continue
+      if (step.action.type === 'goto') break
     }
   }
 
@@ -129,11 +122,50 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
     // page may have closed; non-fatal
   }
 
+  const cancelled = cancelledTasks.has(plan.id)
   const anyFailed = updatedSteps.some((s) => s.status === 'failed')
-  const finalStatus = anyFailed ? 'failed' : 'done'
   const durationMs = Date.now() - startTime
+  const stepsDone = updatedSteps.filter((s) => s.status === 'done').length
+  const stepsFailed = updatedSteps.filter((s) => s.status === 'failed').length
 
-  taskBus.publish({ type: 'task_completed', taskId: plan.id, status: finalStatus, durationMs })
+  if (cancelled) {
+    console.info(`[task:${plan.id}] cancelled durationMs=${durationMs}`)
+    taskBus.publish({
+      type: 'task_cancelled',
+      taskId: plan.id,
+      reason: 'Task cancelled by user',
+      durationMs,
+    })
+  } else if (anyFailed) {
+    console.info(
+      `[task:${plan.id}] failed durationMs=${durationMs} stepsDone=${stepsDone} stepsFailed=${stepsFailed}`
+    )
+    taskBus.publish({
+      type: 'task_failed',
+      taskId: plan.id,
+      error:
+        updatedSteps.find((s) => s.status === 'failed')?.error ??
+        'Task failed during execution',
+      durationMs,
+      stepsDone,
+      stepsFailed,
+    })
+  } else {
+    console.info(
+      `[task:${plan.id}] completed durationMs=${durationMs} stepsDone=${stepsDone} stepsFailed=${stepsFailed}`
+    )
+    taskBus.publish({
+      type: 'task_completed',
+      taskId: plan.id,
+      status: 'done',
+      durationMs,
+      stepsDone,
+      stepsFailed,
+    })
+  }
+
+  cancelledTasks.delete(plan.id)
+  const finalStatus = cancelled ? 'cancelled' : anyFailed ? 'failed' : 'done'
 
   return {
     taskId: plan.id,

@@ -1,164 +1,240 @@
-# Browser Automation — Local-First AI Browser Operator
+# Browser Automation - Local-First Browser Operator
 
-A Chrome extension + localhost runner that automates browser tasks using a structured
-**Observe → Plan → Execute → Verify → Recover** loop. No cloud, no API keys in the extension.
+This repo is a local-first browser operator made of:
 
-## Architecture
+- `packages/extension`: a Chrome/Brave MV3 extension with a side panel UI
+- `packages/runner`: a localhost Fastify + Playwright runner
+- `packages/shared`: shared Zod schemas and types
 
-```
-┌─────────────────────────────────┐     HTTP/localhost      ┌──────────────────────────┐
-│  Chrome Extension (MV3)         │ ◄──────────────────────► │  Runner (Fastify)        │
-│  ─ Side Panel (React)           │   POST /task             │  ─ Planner (mock/LLM)    │
-│  ─ Background Service Worker    │   POST /task/:id/approve │  ─ Executor (Playwright) │
-│  ─ Content Script               │   GET  /health           │  ─ Observer              │
-└─────────────────────────────────┘                          └──────────────────────────┘
-         │                                                            │
-   Collects page                                              Controls Chromium
-   context (URL,                                             browser via Playwright
-   title, elements)
-```
+It uses an `Observe -> Plan -> Execute -> Verify` loop, streams task progress over SSE, keeps risky actions behind approval gates, and keeps provider credentials local to the user's machine.
 
-## Packages
+## What works now
 
-| Package | Description |
-|---------|-------------|
-| `packages/shared` | Zod schemas: `TaskRequest`, `PageObservation`, `ActionStep`, `Action`, `TaskResult` |
-| `packages/runner` | Fastify HTTP server + Playwright automation engine |
-| `packages/extension` | Chrome MV3 extension — side panel UI, service worker, content script |
+- stable Playwright browser/context/page reuse with automatic recreation
+- sequential task execution without one failed task poisoning the next one
+- live task streaming with clearer failed/cancelled/error states
+- grounded planning with `mock`, `openai`, `anthropic`, or `ollama`
+- local provider settings stored by the runner, not in the extension bundle
+- task prompts such as:
+  - `Go to https://example.com`
+  - `Go to https://example.com and take a screenshot`
+  - `Extract the main heading`
+  - `Read the page`
 
 ## Prerequisites
 
 - Node.js 20+
 - pnpm 9+
-- Google Chrome
+- Chrome or Brave
 
 ## Setup
 
-```bash
-# 1. Install dependencies
+```powershell
 pnpm install
-
-# 2. Install Playwright's Chromium browser
+copy packages\runner\.env.example packages\runner\.env
 pnpm install:playwright
+```
 
-# 3. Start the runner (keep this terminal open)
+## Run the runner
+
+```powershell
 pnpm runner:dev
+```
 
-# 4. Build the extension
+If PowerShell blocks `pnpm`, use `pnpm.cmd`.
+
+If port `3000` is taken, set a different port in `packages/runner/.env`:
+
+```env
+RUNNER_PORT=3001
+```
+
+Then verify health:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:3001/health
+```
+
+The health response includes:
+
+- runner status
+- planner/provider status
+- browser state
+  - `browserConnected`
+  - `contextOpen`
+  - `pageOpen`
+  - `pageCount`
+  - `activePageUrl`
+
+## Build and load the extension
+
+```powershell
 pnpm extension:build
 ```
 
-## Loading the Extension in Chrome
+Load this folder as unpacked:
 
-1. Open `chrome://extensions`
-2. Enable **Developer mode** (top right)
-3. Click **Load unpacked**
-4. Select `packages/extension/dist`
-5. Click the extension icon in the toolbar → side panel opens
+- Chrome: `chrome://extensions`
+- Brave: `brave://extensions`
 
-## Usage
+Steps:
 
-1. Start the runner: `pnpm runner:dev`
-2. Open Chrome, click the extension icon
-3. The side panel shows **Connected** when the runner is reachable
-4. Type a task prompt and press Enter or click **Run Task**
+1. Enable **Developer mode**
+2. Click **Load unpacked**
+3. Select `packages/extension/dist`
+4. Open the extension side panel from the toolbar button
+5. In `Settings -> Runner`, set the runner URL to match your port, for example `http://localhost:3001`
 
-### Example prompts
+## Provider configuration
 
+Provider configuration is done in the extension side panel under `Settings -> Provider`.
+
+Supported now:
+
+- `Mock`
+- `OpenAI`
+- `Anthropic`
+- `Ollama`
+
+Planned next:
+
+- `Groq`
+- `Moonshot / Kimi`
+
+### Security model
+
+- API keys are never stored in the extension manifest or source code.
+- Provider secrets are stored locally by the runner in:
+  - `packages/runner/.local/planner-config.json`
+  - or `RUNNER_CONFIG_PATH` if you set one
+- The extension only talks to the runner over localhost.
+- Saved secrets are redacted in the UI and health/settings responses.
+
+### OpenAI
+
+In `Settings -> Provider`:
+
+- Provider: `OpenAI`
+- Model: for example `gpt-4o`
+- API key: your key
+- Base URL: optional
+
+You can also set fallback defaults in `packages/runner/.env`:
+
+```env
+PLANNER_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o
 ```
-Go to https://example.com and take a screenshot
-Search for TypeScript tutorials on google.com
-Go to news.ycombinator.com and extract the page title
-Scroll down on the current page
+
+### Anthropic
+
+In `Settings -> Provider`:
+
+- Provider: `Anthropic`
+- Model: for example `claude-opus-4-6`
+- API key: your key
+
+Fallback env example:
+
+```env
+PLANNER_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-opus-4-6
 ```
 
-## Supported Actions
+### Ollama
 
-| Action | What it does |
-|--------|-------------|
-| `goto` | Navigate to a URL |
-| `click` | Click an element |
-| `type` | Fill an input field |
-| `select` | Choose a `<select>` option |
-| `scroll` | Scroll the page |
-| `hover` | Hover over an element |
-| `press` | Press a keyboard key |
-| `wait_for_selector` | Wait for an element to appear |
-| `wait_for_text` | Wait for text to appear |
-| `extract` | Extract text from an element |
-| `screenshot` | Capture a screenshot |
+In `Settings -> Provider`:
 
-## Sensitive Action Approval
+- Provider: `Ollama`
+- Model: for example `llama3.1`
+- Local endpoint: usually `http://127.0.0.1:11434`
 
-Actions involving keywords like `submit`, `delete`, `payment`, `send`, `purchase` automatically
-require user approval before execution. An approval modal is shown in the side panel.
+Fallback env example:
 
-## Development
+```env
+PLANNER_PROVIDER=ollama
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=llama3.1
+```
 
-```bash
-# Watch-rebuild the extension on changes
-pnpm extension:dev
+## Usage flow
 
-# Run the runner in dev (auto-restart on changes)
+1. Open any normal web page
+2. Open the side panel
+3. Check the connection badge
+4. Submit a task
+5. Watch the live task card update through:
+   - `planning`
+   - `running`
+   - `awaiting approval`
+   - `done`
+   - `failed`
+   - `cancelled`
+
+If the stream is interrupted, the extension now reconciles against the runner task state instead of leaving a stale pending card behind.
+
+## Manual verification
+
+Use these prompts in order:
+
+1. `Go to https://example.com`
+2. `Go to https://example.com and take a screenshot`
+3. `Extract the main heading`
+4. `Read the page`
+
+Expected behavior:
+
+- navigation succeeds
+- screenshot task finishes as `done`
+- heading extraction returns `Example Domain` on `example.com`
+- `Read the page` extracts the main content instead of navigating to a nonsense page
+
+Also verify:
+
+- cancel a running task and confirm it ends as `cancelled`
+- set a bad runner URL and confirm the side panel shows a clear offline message
+- switch provider settings and confirm they persist locally
+- refresh `Observe` and confirm forms, text blocks, and actionable elements appear
+- use `Assist` on a date-heavy page and confirm extraction still works
+
+## Useful commands
+
+```powershell
 pnpm runner:dev
-
-# Type-check everything
-pnpm -r build
+pnpm extension:build
+pnpm typecheck
+pnpm build
 ```
 
-## API Endpoints
+If PowerShell requires it:
 
-```
-GET  /health                 → runner status
-POST /task                   → submit a task
-GET  /task/:id               → get task state
-POST /task/:id/approve       → approve/deny a pending step
-```
-
-### POST /task
-
-```json
-{
-  "id": "abc123",
-  "prompt": "Go to google.com and search for cats",
-  "url": "https://google.com",
-  "title": "Google"
-}
+```powershell
+pnpm.cmd runner:dev
+pnpm.cmd extension:build
+pnpm.cmd typecheck
 ```
 
-## Replacing the Mock Planner
+## Windows notes
 
-The planner in `packages/runner/src/automation/planner.ts` uses keyword heuristics.
-To use a real LLM, replace the `plan()` function with a call to Claude, GPT-4, etc.,
-passing `request.prompt` and `request.observation` as context.
+Find a process using a port:
 
-## Project Structure
-
+```powershell
+netstat -ano | findstr :3000
+taskkill /PID <pid> /F
 ```
-packages/
-  shared/src/schemas/
-    action.ts          # Action, ActionType, SENSITIVE_ACTION_KEYWORDS
-    observation.ts     # PageObservation, ObservedElement
-    task.ts            # TaskRequest, ActionStep, TaskPlan, TaskResult, ApprovalRequest
-  runner/src/
-    automation/
-      observer.ts      # Collect page state from Playwright
-      planner.ts       # Prompt → ActionStep[] (swap for LLM)
-      executor.ts      # Execute plan with Observe→Plan→Execute→Verify→Recover
-      actions/index.ts # All action handlers
-    routes/
-      health.ts
-      task.ts
-    server.ts
-    index.ts
-  extension/src/
-    background/service-worker.ts   # Message broker + runner fetch
-    content/content-script.ts      # Page context collector
-    sidepanel/
-      App.tsx                      # Main UI + approval flow
-      components/
-        TaskInput.tsx
-        ResultDisplay.tsx
-        ApprovalModal.tsx
-        StatusBadge.tsx
-```
+
+## Brave notes
+
+- Load the same unpacked folder: `packages/extension/dist`
+- The extension uses standard Chromium MV3 APIs and should work in Brave as an unpacked extension
+- If your Brave build restricts side panel behavior differently, verify the side panel permission/UI behavior in `brave://extensions`
+
+## Known limitations
+
+- Cancellation is cooperative between steps; it does not currently interrupt a Playwright action already in flight
+- Form filling is improved but still basic; there is no full resume-to-form semantic mapping yet
+- Screenshot artifacts are captured, but there is not yet a dedicated artifact viewer
+- Retry/recovery transparency in the UI is still lighter than a full production operator timeline
+- `Groq` and `Moonshot/Kimi` are not implemented yet, though the provider model is structured so they can be added cleanly
