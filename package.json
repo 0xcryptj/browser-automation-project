@@ -1,0 +1,16 @@
+{
+  "name": "browser-automation",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter runner dev",
+    "runner:dev": "pnpm --filter @browser-automation/runner dev",
+    "runner:start": "pnpm --filter @browser-automation/runner start",
+    "extension:dev": "pnpm --filter @browser-automation/extension dev",
+    "extension:build": "pnpm --filter @browser-automation/extension build",
+    "build": "pnpm -r --filter @browser-automation/shared build && pnpm -r --filter '!@browser-automation/shared' build",
+    "install:playwright": "pnpm --filter @browser-automation/runner exec playwright install chromium"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

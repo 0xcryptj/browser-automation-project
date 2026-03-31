@@ -1,0 +1,13 @@
+node_modules/
+.claude/
+dist/
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+packages/extension/dist/
+packages/runner/dist/
+packages/shared/dist/
+*.tsbuildinfo
+.pnpm-store/
