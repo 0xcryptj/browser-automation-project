@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import type {
   BrowserConnectionConfigInput,
   BrowserConnectionConfigPublic,
@@ -18,34 +19,42 @@ const PROVIDER_OPTIONS: Array<{
   label: string
   help: string
 }> = [
-  { value: 'mock', label: 'Mock', help: 'Fast local fallback for testing task flow.' },
+  { value: 'mock', label: 'Mock', help: 'Fast local fallback for testing the workflow.' },
   { value: 'openai', label: 'OpenAI', help: 'Uses an OpenAI API key stored locally by the runner.' },
   { value: 'anthropic', label: 'Anthropic', help: 'Uses an Anthropic API key stored locally by the runner.' },
   { value: 'ollama', label: 'Ollama', help: 'Uses a local Ollama endpoint such as http://127.0.0.1:11434.' },
 ]
 
-export function SettingsPanel() {
-  const [settings, setSettings] = useState<ExtensionSettings | null>(null)
+export function SettingsPanel({
+  settings: settingsProp,
+  onSettingsChange,
+}: {
+  settings?: ExtensionSettings | null
+  onSettingsChange?: (settings: ExtensionSettings) => void
+}) {
+  const [settings, setSettings] = useState<ExtensionSettings | null>(settingsProp ?? null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [planner, setPlanner] = useState<PlannerProviderConfigPublic | null>(null)
   const [browserSettings, setBrowserSettings] = useState<BrowserConnectionConfigPublic | null>(null)
-  const [browserDraft, setBrowserDraft] = useState<BrowserConnectionConfigInput>({
-    mode: 'launch',
-  })
-  const [plannerDraft, setPlannerDraft] = useState<PlannerProviderConfigInput>({
-    provider: 'mock',
-  })
+  const [browserDraft, setBrowserDraft] = useState<BrowserConnectionConfigInput>({ mode: 'launch' })
+  const [plannerDraft, setPlannerDraft] = useState<PlannerProviderConfigInput>({ provider: 'mock' })
   const [saved, setSaved] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<SettingsTab>('runner')
   const [loadingPlanner, setLoadingPlanner] = useState(true)
 
   useEffect(() => {
-    void getSettings().then(setSettings)
+    if (settingsProp) setSettings(settingsProp)
+  }, [settingsProp])
+
+  useEffect(() => {
+    if (!settingsProp) {
+      void getSettings().then(setSettings)
+    }
     void getProfile().then(setProfile)
     void loadPlanner()
     void loadBrowserSettings()
-  }, [])
+  }, [settingsProp])
 
   const isProviderOffline = useMemo(() => !planner && !loadingPlanner, [planner, loadingPlanner])
 
@@ -86,7 +95,8 @@ export function SettingsPanel() {
   async function handleSettingsSave() {
     if (!settings) return
     await saveSettings(settings)
-    flashSaved('Runner settings saved')
+    onSettingsChange?.(settings)
+    flashSaved('App settings saved')
   }
 
   async function handleBrowserSave() {
@@ -98,7 +108,7 @@ export function SettingsPanel() {
         cdpUrl: nextBrowser.cdpUrl,
       })
       setError(null)
-      flashSaved('Browser target settings saved locally')
+      flashSaved('Browser target saved')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Browser settings save failed.')
     }
@@ -114,7 +124,7 @@ export function SettingsPanel() {
         baseUrl: nextPlanner.baseUrl,
       })
       setError(null)
-      flashSaved('Provider settings saved locally')
+      flashSaved('Provider settings saved')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Provider settings save failed.')
     }
@@ -143,63 +153,70 @@ export function SettingsPanel() {
   }
 
   if (!settings || !profile) {
-    return <div style={{ padding: 16, color: '#64748b', fontSize: 12 }}>Loading...</div>
+    return <div style={{ padding: 16, color: 'var(--muted)', fontSize: 12 }}>Loading settings...</div>
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <div style={{ display: 'flex', borderBottom: '1px solid #1e1e2e', marginBottom: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={tabRowStyle}>
         {(['runner', 'provider', 'profile'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             style={{
-              background: 'none',
-              border: 'none',
-              borderBottom: activeTab === tab ? '2px solid #6366f1' : '2px solid transparent',
-              color: activeTab === tab ? '#e2e8f0' : '#64748b',
-              fontSize: 12,
-              fontWeight: 600,
-              padding: '6px 12px',
-              cursor: 'pointer',
-              textTransform: 'capitalize',
+              ...chipButtonStyle,
+              background: activeTab === tab ? 'var(--panel-soft)' : 'var(--panel)',
+              color: activeTab === tab ? 'var(--text)' : 'var(--muted)',
             }}
           >
-            {tab === 'profile' ? 'My Profile' : tab}
+            {tab === 'profile' ? 'Profile' : capitalize(tab)}
           </button>
         ))}
       </div>
 
-      {saved && (
-        <div style={savedBannerStyle}>
-          {saved}
-        </div>
-      )}
-
-      {error && (
-        <div style={errorBannerStyle}>
-          {error}
-        </div>
-      )}
+      {saved && <Callout tone="success">{saved}</Callout>}
+      {error && <Callout tone="danger">{error}</Callout>}
 
       {activeTab === 'runner' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Section title="App and browser">
           <Field label="Runner URL" hint="Used by Chrome or Brave to connect to the local runner.">
             <input
               type="url"
               value={settings.runnerBaseUrl}
-              onChange={(e) => setSettings({ ...settings, runnerBaseUrl: e.target.value })}
+              onChange={(e) => {
+                const next = { ...settings, runnerBaseUrl: e.target.value }
+                setSettings(next)
+                onSettingsChange?.(next)
+              }}
               placeholder="http://localhost:3001"
               style={inputStyle}
             />
           </Field>
 
+          <Field label="Theme">
+            <select
+              value={settings.theme}
+              onChange={(e) => {
+                const next = { ...settings, theme: e.target.value as ExtensionSettings['theme'] }
+                setSettings(next)
+                onSettingsChange?.(next)
+              }}
+              style={inputStyle}
+            >
+              <option value="system">System</option>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </Field>
+
           <Field label="Default Mode">
             <select
               value={settings.defaultMode}
-              onChange={(e) =>
-                setSettings({ ...settings, defaultMode: e.target.value as 'standard' | 'assist' })
-              }
+              onChange={(e) => {
+                const next = { ...settings, defaultMode: e.target.value as 'standard' | 'assist' }
+                setSettings(next)
+                onSettingsChange?.(next)
+              }}
               style={inputStyle}
             >
               <option value="standard">Standard</option>
@@ -210,88 +227,84 @@ export function SettingsPanel() {
           <Toggle
             label="Show observation debug JSON"
             value={settings.showObservationDebug}
-            onChange={(value) => setSettings({ ...settings, showObservationDebug: value })}
+            onChange={(value) => {
+              const next = { ...settings, showObservationDebug: value }
+              setSettings(next)
+              onSettingsChange?.(next)
+            }}
           />
 
-          <div style={metaCardStyle}>
-            <div style={{ marginBottom: 8, color: '#cbd5e1', fontWeight: 600 }}>Browser Target</div>
-
-            <Field
-              label="Connection Mode"
-              hint="Attach mode lets the runner operate in your existing Brave or Chrome window instead of opening a separate Playwright browser."
+          <Field
+            label="Browser Connection"
+            hint="Attach mode lets the runner operate in your existing Brave or Chrome window instead of opening its own browser."
+          >
+            <select
+              value={browserDraft.mode}
+              onChange={(e) =>
+                setBrowserDraft({
+                  mode: e.target.value as BrowserConnectionConfigInput['mode'],
+                  cdpUrl: e.target.value === 'attach' ? browserDraft.cdpUrl || DEFAULT_BROWSER_CDP_URL : undefined,
+                })
+              }
+              style={inputStyle}
             >
-              <select
-                value={browserDraft.mode}
+              <option value="launch">Launch isolated browser</option>
+              <option value="attach">Attach to Brave or Chrome</option>
+            </select>
+          </Field>
+
+          {browserDraft.mode === 'attach' && (
+            <Field
+              label="CDP URL"
+              hint="Start Brave or Chrome with --remote-debugging-port=9222, then point this to http://127.0.0.1:9222"
+            >
+              <input
+                type="url"
+                value={browserDraft.cdpUrl ?? ''}
                 onChange={(e) =>
-                  setBrowserDraft({
-                    mode: e.target.value as BrowserConnectionConfigInput['mode'],
-                    cdpUrl:
-                      e.target.value === 'attach'
-                        ? browserDraft.cdpUrl || DEFAULT_BROWSER_CDP_URL
-                        : undefined,
-                  })
+                  setBrowserDraft((current) => ({ ...current, cdpUrl: e.target.value || undefined }))
                 }
+                placeholder={DEFAULT_BROWSER_CDP_URL}
                 style={inputStyle}
-              >
-                <option value="launch">Launch isolated browser</option>
-                <option value="attach">Attach to Brave or Chrome</option>
-              </select>
+              />
             </Field>
+          )}
 
-            {browserDraft.mode === 'attach' && (
-              <Field
-                label="CDP URL"
-                hint="Example: brave.exe --remote-debugging-port=9222, then point this to http://127.0.0.1:9222"
-              >
-                <input
-                  type="url"
-                  value={browserDraft.cdpUrl ?? ''}
-                  onChange={(e) =>
-                    setBrowserDraft((current) => ({ ...current, cdpUrl: e.target.value || undefined }))
-                  }
-                  placeholder={DEFAULT_BROWSER_CDP_URL}
-                  style={inputStyle}
-                />
-              </Field>
-            )}
+          {browserSettings && (
+            <InfoPanel>
+              <div>Mode: {browserSettings.mode}</div>
+              {browserSettings.cdpUrl && <div>CDP URL: {browserSettings.cdpUrl}</div>}
+              <div>Ready: {browserSettings.ready ? 'Yes' : 'No'}</div>
+              {browserSettings.warning && <div style={{ color: 'var(--warning)' }}>{browserSettings.warning}</div>}
+            </InfoPanel>
+          )}
 
-            {browserSettings && (
-              <div style={{ ...infoCardStyle, marginTop: 10 }}>
-                <div>Mode: {browserSettings.mode}</div>
-                {browserSettings.cdpUrl && <div>CDP URL: {browserSettings.cdpUrl}</div>}
-                <div>Ready: {browserSettings.ready ? 'Yes' : 'No'}</div>
-                {browserSettings.warning && <div style={{ color: '#fbbf24', marginTop: 4 }}>{browserSettings.warning}</div>}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-              <button onClick={() => void handleBrowserSave()} style={secondaryButtonStyle}>
-                Save Browser Target
-              </button>
-              <button onClick={() => void loadBrowserSettings()} style={secondaryButtonStyle}>
-                Refresh Browser Status
-              </button>
-            </div>
+          <div style={buttonRowStyle}>
+            <button onClick={() => void handleBrowserSave()} style={secondaryButtonStyle}>
+              Save Browser Target
+            </button>
+            <button onClick={() => void loadBrowserSettings()} style={secondaryButtonStyle}>
+              Refresh Browser Status
+            </button>
+            <button onClick={() => void handleSettingsSave()} style={primaryButtonStyle}>
+              Save App Settings
+            </button>
           </div>
-
-          <button onClick={() => void handleSettingsSave()} style={saveButtonStyle}>
-            Save Runner Settings
-          </button>
-        </div>
+        </Section>
       )}
 
       {activeTab === 'provider' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={infoCardStyle}>
+        <Section title="Provider">
+          <Callout tone="info">
             Provider credentials remain local to your machine. This extension never ships API keys in the bundle or manifest.
-          </div>
+          </Callout>
 
-          {loadingPlanner && <div style={{ color: '#64748b', fontSize: 12 }}>Loading provider settings...</div>}
+          {loadingPlanner && <div style={{ color: 'var(--muted)', fontSize: 12 }}>Loading provider settings...</div>}
 
           {isProviderOffline && (
-            <div style={warningCardStyle}>
+            <Callout tone="warning">
               Provider settings come from the runner. Make sure the runner URL is correct and the runner is online.
-            </div>
+            </Callout>
           )}
 
           {!loadingPlanner && (
@@ -303,10 +316,7 @@ export function SettingsPanel() {
                     setPlannerDraft((current) => ({
                       ...current,
                       provider: e.target.value as PlannerProviderConfigInput['provider'],
-                      baseUrl:
-                        e.target.value === 'ollama'
-                          ? current.baseUrl || DEFAULT_OLLAMA_BASE_URL
-                          : undefined,
+                      baseUrl: e.target.value === 'ollama' ? current.baseUrl || DEFAULT_OLLAMA_BASE_URL : undefined,
                     }))
                   }
                   style={inputStyle}
@@ -319,16 +329,14 @@ export function SettingsPanel() {
                 </select>
               </Field>
 
-              <div style={{ fontSize: 11, color: '#64748b' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                 {PROVIDER_OPTIONS.find((option) => option.value === plannerDraft.provider)?.help}
               </div>
 
               <Field label="Model">
                 <input
                   value={plannerDraft.model ?? ''}
-                  onChange={(e) =>
-                    setPlannerDraft((current) => ({ ...current, model: e.target.value || undefined }))
-                  }
+                  onChange={(e) => setPlannerDraft((current) => ({ ...current, model: e.target.value || undefined }))}
                   placeholder={plannerDraft.provider === 'ollama' ? 'llama3.1' : 'model name'}
                   style={inputStyle}
                 />
@@ -336,20 +344,14 @@ export function SettingsPanel() {
 
               {(plannerDraft.provider === 'ollama' || plannerDraft.provider === 'openai') && (
                 <Field
-                  label={plannerDraft.provider === 'ollama' ? 'Local Endpoint' : 'Base URL'}
+                  label={plannerDraft.provider === 'ollama' ? 'Endpoint' : 'Base URL'}
                   hint={plannerDraft.provider === 'ollama' ? 'Default Ollama endpoint: http://127.0.0.1:11434' : 'Optional override for compatible API hosts.'}
                 >
                   <input
                     type="url"
                     value={plannerDraft.baseUrl ?? ''}
-                    onChange={(e) =>
-                      setPlannerDraft((current) => ({ ...current, baseUrl: e.target.value || undefined }))
-                    }
-                    placeholder={
-                      plannerDraft.provider === 'ollama'
-                        ? DEFAULT_OLLAMA_BASE_URL
-                        : 'https://api.openai.com/v1'
-                    }
+                    onChange={(e) => setPlannerDraft((current) => ({ ...current, baseUrl: e.target.value || undefined }))}
+                    placeholder={plannerDraft.provider === 'ollama' ? DEFAULT_OLLAMA_BASE_URL : 'https://api.openai.com/v1'}
                     style={inputStyle}
                   />
                 </Field>
@@ -360,9 +362,7 @@ export function SettingsPanel() {
                   <input
                     type="password"
                     value={plannerDraft.apiKey ?? ''}
-                    onChange={(e) =>
-                      setPlannerDraft((current) => ({ ...current, apiKey: e.target.value || undefined }))
-                    }
+                    onChange={(e) => setPlannerDraft((current) => ({ ...current, apiKey: e.target.value || undefined }))}
                     placeholder={planner?.hasApiKey ? `Saved: ${planner.apiKeyPreview}` : 'Paste API key'}
                     style={inputStyle}
                   />
@@ -370,17 +370,17 @@ export function SettingsPanel() {
               )}
 
               {planner && (
-                <div style={metaCardStyle}>
+                <InfoPanel>
                   <div>Source: {planner.source}</div>
                   <div>Ready: {planner.ready ? 'Yes' : 'No'}</div>
                   {planner.configPath && <div>Local config: {planner.configPath}</div>}
                   {planner.apiKeyPreview && <div>Stored key: {planner.apiKeyPreview}</div>}
-                  {planner.warning && <div style={{ color: '#f59e0b' }}>{planner.warning}</div>}
-                </div>
+                  {planner.warning && <div style={{ color: 'var(--warning)' }}>{planner.warning}</div>}
+                </InfoPanel>
               )}
 
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button onClick={() => void handleProviderSave()} style={saveButtonStyle}>
+              <div style={buttonRowStyle}>
+                <button onClick={() => void handleProviderSave()} style={primaryButtonStyle}>
                   Save Provider Settings
                 </button>
                 {(planner?.hasApiKey ?? false) && (
@@ -394,74 +394,41 @@ export function SettingsPanel() {
               </div>
             </>
           )}
-        </div>
+        </Section>
       )}
 
       {activeTab === 'profile' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <Section title="Profile">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Field label="First Name">
-              <input
-                value={profile.firstName ?? ''}
-                onChange={(e) => setProfile({ ...profile, firstName: e.target.value })}
-                style={inputStyle}
-              />
+              <input value={profile.firstName ?? ''} onChange={(e) => setProfile({ ...profile, firstName: e.target.value })} style={inputStyle} />
             </Field>
             <Field label="Last Name">
-              <input
-                value={profile.lastName ?? ''}
-                onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
-                style={inputStyle}
-              />
+              <input value={profile.lastName ?? ''} onChange={(e) => setProfile({ ...profile, lastName: e.target.value })} style={inputStyle} />
             </Field>
           </div>
 
           <Field label="Email">
-            <input
-              type="email"
-              value={profile.email ?? ''}
-              onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-              style={inputStyle}
-            />
+            <input type="email" value={profile.email ?? ''} onChange={(e) => setProfile({ ...profile, email: e.target.value })} style={inputStyle} />
           </Field>
 
           <Field label="Phone">
-            <input
-              type="tel"
-              value={profile.phone ?? ''}
-              onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-              style={inputStyle}
-            />
+            <input type="tel" value={profile.phone ?? ''} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} style={inputStyle} />
           </Field>
 
           <Field label="Location">
-            <input
-              value={profile.location ?? ''}
-              onChange={(e) => setProfile({ ...profile, location: e.target.value })}
-              style={inputStyle}
-              placeholder="City, State"
-            />
+            <input value={profile.location ?? ''} onChange={(e) => setProfile({ ...profile, location: e.target.value })} style={inputStyle} placeholder="City, State" />
           </Field>
 
           <Field label="LinkedIn URL">
-            <input
-              type="url"
-              value={profile.linkedIn ?? ''}
-              onChange={(e) => setProfile({ ...profile, linkedIn: e.target.value })}
-              style={inputStyle}
-            />
+            <input type="url" value={profile.linkedIn ?? ''} onChange={(e) => setProfile({ ...profile, linkedIn: e.target.value })} style={inputStyle} />
           </Field>
 
           <Field label="GitHub URL">
-            <input
-              type="url"
-              value={profile.github ?? ''}
-              onChange={(e) => setProfile({ ...profile, github: e.target.value })}
-              style={inputStyle}
-            />
+            <input type="url" value={profile.github ?? ''} onChange={(e) => setProfile({ ...profile, github: e.target.value })} style={inputStyle} />
           </Field>
 
-          <Field label="Skills (comma-separated)">
+          <Field label="Skills">
             <input
               value={profile.skills.join(', ')}
               onChange={(e) =>
@@ -488,157 +455,178 @@ export function SettingsPanel() {
             />
           </Field>
 
-          <button onClick={() => void handleProfileSave()} style={saveButtonStyle}>
+          <button onClick={() => void handleProfileSave()} style={primaryButtonStyle}>
             Save Profile
           </button>
-        </div>
+        </Section>
       )}
     </div>
   )
 }
 
-function Field({
-  label,
-  children,
-  hint,
-}: {
-  label: string
-  children: React.ReactNode
-  hint?: string
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{label}</label>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        padding: 14,
+        background: 'var(--panel)',
+        border: '1px solid var(--border)',
+        borderRadius: 18,
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{title}</div>
       {children}
-      {hint && <span style={{ fontSize: 10, color: '#475569' }}>{hint}</span>}
     </div>
   )
 }
 
-function Toggle({
-  label,
-  value,
-  onChange,
-}: {
-  label: string
-  value: boolean
-  onChange: (value: boolean) => void
-}) {
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
-    <div
-      style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-      onClick={() => onChange(!value)}
-    >
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <label style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{label}</label>
+      {children}
+      {hint && <span style={{ fontSize: 10, color: 'var(--muted)' }}>{hint}</span>}
+    </div>
+  )
+}
+
+function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => onChange(!value)}>
       <div
         style={{
-          width: 28,
-          height: 16,
-          borderRadius: 8,
-          background: value ? '#6366f1' : '#1e2040',
+          width: 34,
+          height: 20,
+          borderRadius: 999,
+          background: value ? '#2563eb' : 'var(--surface)',
           position: 'relative',
           flexShrink: 0,
-          border: `1px solid ${value ? '#6366f1' : '#313150'}`,
+          border: '1px solid var(--border)',
         }}
       >
         <div
           style={{
             position: 'absolute',
             top: 2,
-            left: value ? 12 : 2,
-            width: 10,
-            height: 10,
+            left: value ? 16 : 2,
+            width: 14,
+            height: 14,
             borderRadius: '50%',
-            background: value ? '#fff' : '#475569',
+            background: value ? '#ffffff' : 'var(--muted)',
             transition: 'left 0.15s',
           }}
         />
       </div>
-      <span style={{ fontSize: 11, color: '#94a3b8' }}>{label}</span>
+      <span style={{ fontSize: 12, color: 'var(--text-soft)' }}>{label}</span>
     </div>
   )
 }
 
-const inputStyle: React.CSSProperties = {
-  background: '#1e1e2e',
-  border: '1px solid #313150',
-  borderRadius: 6,
-  color: '#e2e8f0',
+function Callout({ tone, children }: { tone: 'success' | 'danger' | 'warning' | 'info'; children: React.ReactNode }) {
+  const palette =
+    tone === 'success'
+      ? { bg: 'rgba(34,197,94,0.08)', border: 'rgba(34,197,94,0.18)', color: '#22c55e' }
+      : tone === 'danger'
+        ? { bg: 'var(--danger-bg)', border: 'var(--danger-border)', color: 'var(--danger)' }
+        : tone === 'warning'
+          ? { bg: 'var(--warning-bg)', border: 'var(--warning-border)', color: 'var(--warning)' }
+          : { bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.18)', color: '#60a5fa' }
+
+  return (
+    <div
+      style={{
+        background: palette.bg,
+        border: `1px solid ${palette.border}`,
+        borderRadius: 14,
+        color: palette.color,
+        fontSize: 12,
+        lineHeight: 1.5,
+        padding: '10px 12px',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function InfoPanel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 14,
+        color: 'var(--text-soft)',
+        fontSize: 11,
+        lineHeight: 1.55,
+        padding: '10px 12px',
+        wordBreak: 'break-word',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+const tabRowStyle: CSSProperties = {
+  display: 'flex',
+  gap: 8,
+  flexWrap: 'wrap',
+}
+
+const chipButtonStyle: CSSProperties = {
+  border: '1px solid var(--border)',
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 600,
+  padding: '7px 10px',
+  cursor: 'pointer',
+}
+
+const inputStyle: CSSProperties = {
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 12,
+  color: 'var(--text)',
   fontSize: 12,
-  padding: '6px 8px',
+  padding: '9px 10px',
   width: '100%',
   outline: 'none',
   fontFamily: 'inherit',
 }
 
-const saveButtonStyle: React.CSSProperties = {
-  background: '#6366f1',
+const buttonRowStyle: CSSProperties = {
+  display: 'flex',
+  gap: 8,
+  flexWrap: 'wrap',
+}
+
+const primaryButtonStyle: CSSProperties = {
+  background: '#2563eb',
   border: 'none',
-  borderRadius: 6,
-  color: '#fff',
+  borderRadius: 999,
+  color: '#ffffff',
   fontSize: 12,
   fontWeight: 600,
-  padding: '8px 16px',
+  padding: '9px 14px',
   cursor: 'pointer',
 }
 
-const secondaryButtonStyle: React.CSSProperties = {
-  background: '#1e1e2e',
-  border: '1px solid #313150',
-  borderRadius: 6,
-  color: '#cbd5e1',
+const secondaryButtonStyle: CSSProperties = {
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 999,
+  color: 'var(--text)',
   fontSize: 12,
   fontWeight: 600,
-  padding: '8px 16px',
+  padding: '9px 14px',
   cursor: 'pointer',
-}
-
-const infoCardStyle: React.CSSProperties = {
-  background: '#08130d',
-  border: '1px solid #22c55e22',
-  borderRadius: 8,
-  color: '#86efac',
-  fontSize: 11,
-  lineHeight: 1.45,
-  padding: '10px 12px',
-}
-
-const warningCardStyle: React.CSSProperties = {
-  background: '#1a1500',
-  border: '1px solid #f59e0b22',
-  borderRadius: 8,
-  color: '#fbbf24',
-  fontSize: 11,
-  lineHeight: 1.45,
-  padding: '10px 12px',
-}
-
-const metaCardStyle: React.CSSProperties = {
-  background: '#121220',
-  border: '1px solid #1e1e2e',
-  borderRadius: 8,
-  color: '#94a3b8',
-  fontSize: 11,
-  lineHeight: 1.45,
-  padding: '10px 12px',
-  wordBreak: 'break-word',
-}
-
-const savedBannerStyle: React.CSSProperties = {
-  background: '#08130d',
-  border: '1px solid #22c55e22',
-  borderRadius: 8,
-  color: '#86efac',
-  fontSize: 11,
-  marginBottom: 12,
-  padding: '8px 10px',
-}
-
-const errorBannerStyle: React.CSSProperties = {
-  background: '#1a0a0a',
-  border: '1px solid #ef444433',
-  borderRadius: 8,
-  color: '#fca5a5',
-  fontSize: 11,
-  marginBottom: 12,
-  padding: '8px 10px',
 }

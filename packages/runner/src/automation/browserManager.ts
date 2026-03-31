@@ -79,6 +79,12 @@ async function createBrowser() {
   const browserTarget = await getResolvedBrowserConfig()
 
   if (browserTarget.mode === 'attach') {
+    if (!browserTarget.ready) {
+      throw new Error(
+        browserTarget.warning ??
+          `Browser attach mode is not reachable at ${browserTarget.cdpUrl ?? 'the configured CDP URL'}.`
+      )
+    }
     browser = await chromium.connectOverCDP(browserTarget.cdpUrl!)
     attachBrowser(browser)
     activeBrowserConfigKey = serializeBrowserTarget(browserTarget)

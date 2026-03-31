@@ -42,7 +42,8 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
     }
   }
 
-  const { page } = await ensureBrowserSession(plan.context)
+  let workingContext = cloneTaskContext(plan.context)
+  const { page } = await ensureBrowserSession(workingContext)
   const updatedSteps: ActionStep[] = plan.steps.map((s) => ({ ...s }))
 
   for (let i = 0; i < updatedSteps.length; i++) {
@@ -65,7 +66,7 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
       })
       return {
         taskId: plan.id,
-        plan: { ...plan, steps: updatedSteps, status: 'awaiting_approval' },
+        plan: { ...plan, steps: updatedSteps, status: 'awaiting_approval', context: workingContext },
         durationMs: Date.now() - startTime,
       }
     }
@@ -80,10 +81,10 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
       description: step.action.description,
       selector: step.action.selector ?? undefined,
       elementRef: step.action.elementRef ?? undefined,
-      targetLabel: resolveTargetLabel(plan.context, step),
+      targetLabel: resolveTargetLabel(workingContext, step),
     })
 
-    const result = await runAction(page, step.action, plan.context)
+    const result = await runAction(page, step.action, workingContext)
     const stepDuration = Date.now() - stepStart
 
     if (result.success) {
@@ -102,6 +103,10 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
         hasScreenshot: Boolean(result.screenshot),
         durationMs: stepDuration,
       })
+
+      if (shouldRefreshContext(step)) {
+        workingContext = await refreshTaskContext(page, workingContext, plan.id, step.action.type)
+      }
     } else {
       updatedSteps[i] = { ...step, status: 'failed', error: result.error, durationMs: stepDuration }
       taskBus.publish({
@@ -172,9 +177,45 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
 
   return {
     taskId: plan.id,
-    plan: { ...plan, steps: updatedSteps, status: finalStatus },
+    plan: { ...plan, steps: updatedSteps, status: finalStatus, context: workingContext },
     observation: finalObservation,
     durationMs,
+  }
+}
+
+function cloneTaskContext(context: TaskContext | undefined): TaskContext | undefined {
+  return context ? JSON.parse(JSON.stringify(context)) as TaskContext : undefined
+}
+
+function shouldRefreshContext(step: ActionStep) {
+  return ['goto', 'click', 'type', 'select', 'press', 'pressKey', 'scroll'].includes(step.action.type)
+}
+
+async function refreshTaskContext(
+  page: Parameters<typeof observe>[0],
+  current: TaskContext | undefined,
+  taskId: string,
+  actionType: string
+) {
+  try {
+    const observation = await observe(page, false)
+    const nextContext: TaskContext = {
+      url: observation.url,
+      title: observation.title,
+      snapshot: observation.snapshot,
+      text: observation.text,
+      headings: observation.headings,
+      textBlocks: observation.textBlocks?.map((block) => block.text),
+    }
+    console.info(`[task:${taskId}] refreshed page context after ${actionType}${nextContext.url ? ` url=${nextContext.url}` : ''}`)
+    return nextContext
+  } catch (error) {
+    console.warn(
+      `[task:${taskId}] could not refresh page context after ${actionType}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+    return current
   }
 }
 

@@ -108,7 +108,7 @@ async function probeCdp(cdpUrl: string) {
 
     return {
       ready: false,
-      warning: `Browser attach mode is not reachable at ${cdpUrl}: ${message}`,
+      warning: `Attach mode is not reachable at ${cdpUrl}. Fully close Brave or Chrome, relaunch it with --remote-debugging-port=9222, then refresh browser status. (${message})`,
     }
   } finally {
     clearTimeout(timeout)

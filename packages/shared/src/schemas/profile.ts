@@ -60,6 +60,7 @@ export type UserProfile = z.infer<typeof UserProfile>
 export const ExtensionSettings = z.object({
   runnerBaseUrl: z.string().url().default('http://localhost:3000'),
   defaultMode: z.enum(['standard', 'assist']).default('standard'),
+  theme: z.enum(['system', 'dark', 'light']).default('system'),
   autoObserveOnOpen: z.boolean().default(false),
   showObservationDebug: z.boolean().default(false),
   maxHistoryEntries: z.number().int().min(1).max(200).default(50),
@@ -69,6 +70,7 @@ export type ExtensionSettings = z.infer<typeof ExtensionSettings>
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   runnerBaseUrl: 'http://localhost:3000',
   defaultMode: 'standard',
+  theme: 'system',
   autoObserveOnOpen: false,
   showObservationDebug: false,
   maxHistoryEntries: 50,

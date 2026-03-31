@@ -23,26 +23,33 @@ export const actionHandlers: Record<string, ActionHandler> = {
 
   click: async (page, action, context) => {
     const target = resolveTarget(action, context?.snapshot)
-    if (!target.selector) return fail('click requires a selector or elementRef')
-    const locator = await findFirstVisible(page, target.selector)
+    const locator = await findBestTargetLocator(page, action, context)
     await locator.click()
     return ok(`Clicked ${target.label}`)
   },
 
   type: async (page, action, context) => {
     const target = resolveTarget(action, context?.snapshot)
-    if (!target.selector) return fail('type requires a selector or elementRef')
     if (action.value == null) return fail('type requires a value')
-    const locator = await findFirstVisible(page, target.selector)
-    await locator.fill(action.value)
+    const locator = await findBestTargetLocator(page, action, context)
+    const contentEditable = await locator
+      .evaluate((node) => node instanceof HTMLElement && node.isContentEditable)
+      .catch(() => false)
+
+    if (contentEditable) {
+      await locator.click()
+      await page.keyboard.press('Control+A').catch(() => {})
+      await page.keyboard.insertText(action.value)
+    } else {
+      await locator.fill(action.value)
+    }
     return ok(`Typed "${action.value}" into ${target.label}`)
   },
 
   select: async (page, action, context) => {
     const target = resolveTarget(action, context?.snapshot)
-    if (!target.selector) return fail('select requires a selector or elementRef')
     if (!action.value) return fail('select requires a value')
-    const locator = await findFirstVisible(page, target.selector)
+    const locator = await findBestTargetLocator(page, action, context)
     await locator.selectOption(action.value)
     return ok(`Selected "${action.value}" in ${target.label}`)
   },
@@ -62,8 +69,7 @@ export const actionHandlers: Record<string, ActionHandler> = {
 
   hover: async (page, action, context) => {
     const target = resolveTarget(action, context?.snapshot)
-    if (!target.selector) return fail('hover requires a selector or elementRef')
-    const locator = await findFirstVisible(page, target.selector)
+    const locator = await findBestTargetLocator(page, action, context)
     await locator.hover()
     return ok(`Hovered over ${target.label}`)
   },
@@ -71,8 +77,8 @@ export const actionHandlers: Record<string, ActionHandler> = {
   press: async (page, action, context) => {
     if (!action.key) return fail('press requires a key')
     const target = resolveTarget(action, context?.snapshot)
-    if (target.selector) {
-      const locator = await findFirstVisible(page, target.selector)
+    if (target.selector || action.elementRef) {
+      const locator = await findBestTargetLocator(page, action, context)
       await locator.press(action.key)
       return ok(`Pressed ${action.key} on ${target.label}`)
     }
@@ -87,8 +93,7 @@ export const actionHandlers: Record<string, ActionHandler> = {
 
   wait_for_selector: async (page, action, context) => {
     const target = resolveTarget(action, context?.snapshot)
-    if (!target.selector) return fail('wait_for_selector requires a selector or elementRef')
-    await findFirstVisible(page, target.selector, 15_000)
+    await findBestTargetLocator(page, action, context, 15_000)
     return ok(`Selector "${target.label}" is visible`)
   },
 
@@ -155,6 +160,100 @@ async function findFirstVisible(page: Page, selector: string, timeout = 10_000):
   throw lastError instanceof Error ? lastError : new Error(`No visible element found for ${selector}`)
 }
 
+async function findBestTargetLocator(
+  page: Page,
+  action: Action,
+  context?: TaskContext,
+  timeout = 10_000
+): Promise<Locator> {
+  const target = resolveTarget(action, context?.snapshot)
+  const fallbackSelector = action.selector ?? target.element?.selector ?? null
+  const candidates = [
+    ...(fallbackSelector ? buildSelectorLocators(page, fallbackSelector) : []),
+    ...buildSemanticLocators(page, target.element, action),
+  ]
+
+  if (candidates.length === 0) {
+    throw new Error(`${action.type} requires a selector or elementRef`)
+  }
+
+  let lastError: unknown = null
+  const timeoutPerCandidate = Math.max(700, Math.floor(timeout / candidates.length))
+
+  for (const locator of candidates) {
+    try {
+      await locator.waitFor({ state: 'visible', timeout: timeoutPerCandidate })
+      await locator.scrollIntoViewIfNeeded().catch(() => {})
+      return locator
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Could not find a visible target for ${target.label}`)
+}
+
+function buildSelectorLocators(page: Page, selector: string) {
+  return selector
+    .split(',')
+    .map((candidate) => candidate.trim())
+    .filter(Boolean)
+    .map((candidate) => page.locator(candidate).first())
+}
+
+function buildSemanticLocators(
+  page: Page,
+  element: ResolvedTargetElement | undefined,
+  action: Action
+) {
+  if (!element) {
+    return []
+  }
+
+  const locators: Locator[] = []
+  const textLabel = firstNonEmpty(element.label, element.text, element.name, element.placeholder)
+  const cssTag = kindToCssTag(element.kind)
+
+  if (cssTag && element.name) {
+    locators.push(page.locator(`${cssTag}[name="${escapeCssValue(element.name)}"]`).first())
+  }
+  if (cssTag && element.placeholder) {
+    locators.push(page.locator(`${cssTag}[placeholder="${escapeCssValue(element.placeholder)}"]`).first())
+  }
+  if (cssTag && element.href && element.kind === 'link') {
+    locators.push(page.locator(`a[href="${escapeCssValue(element.href)}"]`).first())
+  }
+
+  if (element.label) {
+    locators.push(page.getByLabel(element.label, { exact: false }).first())
+  }
+  if (element.placeholder) {
+    locators.push(page.getByPlaceholder(element.placeholder, { exact: false }).first())
+  }
+
+  const roleName = textLabel ?? action.value ?? undefined
+  if (roleName && (element.kind === 'button' || element.role === 'button')) {
+    locators.push(page.getByRole('button', { name: roleName, exact: false }).first())
+  }
+  if (roleName && (element.kind === 'link' || element.role === 'link')) {
+    locators.push(page.getByRole('link', { name: roleName, exact: false }).first())
+  }
+  if (roleName && (element.kind === 'input' || element.kind === 'textarea' || element.kind === 'select')) {
+    locators.push(page.getByRole('textbox', { name: roleName, exact: false }).first())
+  }
+  if (textLabel && (element.kind === 'button' || element.kind === 'link' || element.kind === 'actionable')) {
+    locators.push(page.getByText(textLabel, { exact: false }).first())
+  }
+
+  return locators
+}
+
+type ResolvedTargetElement =
+  | CompactPageSnapshot['elements'][number]
+  | CompactPageSnapshot['forms'][number]['fields'][number]
+
 function resolveTarget(action: Action, snapshot?: CompactPageSnapshot, fallbackSelector?: string | null) {
   const fromRef =
     action.elementRef && snapshot
@@ -168,7 +267,7 @@ function resolveTarget(action: Action, snapshot?: CompactPageSnapshot, fallbackS
       ? fromRef.label ?? fromRef.name ?? fromRef.text ?? selector ?? action.elementRef ?? 'target'
       : selector ?? action.elementRef ?? 'target'
 
-  return { selector, label }
+  return { selector, label, element: fromRef }
 }
 
 async function extractText(
@@ -344,4 +443,29 @@ function safeUrl(value?: string) {
   } catch {
     return null
   }
+}
+
+function kindToCssTag(kind: ResolvedTargetElement['kind']) {
+  switch (kind) {
+    case 'input':
+      return 'input'
+    case 'textarea':
+      return 'textarea'
+    case 'select':
+      return 'select'
+    case 'button':
+      return 'button'
+    case 'link':
+      return 'a'
+    default:
+      return ''
+  }
+}
+
+function escapeCssValue(value: string) {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function firstNonEmpty(...values: Array<string | undefined>) {
+  return values.find((value) => value?.trim())
 }

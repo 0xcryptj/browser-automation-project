@@ -1,413 +1,276 @@
 import type { StreamState } from '../hooks/useTaskStream.js'
 
-// ── Minimal line icons (Icon8 Outlined style) ─────────────────────────────────
-
-function IconGoto() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 8h10M8 4l4 4-4 4" />
-    </svg>
-  )
-}
-function IconClick() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 2l9 6-4 1-2 5z" />
-    </svg>
-  )
-}
-function IconType() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 2l4 4-8 8H2v-4z" />
-    </svg>
-  )
-}
-function IconSelect() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="12" height="10" rx="1" />
-      <path d="M5 8l3 3 3-3" />
-    </svg>
-  )
-}
-function IconScroll() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="8" y1="2" x2="8" y2="14" />
-      <path d="M4 6l4-4 4 4M4 10l4 4 4-4" />
-    </svg>
-  )
-}
-function IconHover() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 2v6M8 4v4M10 5v3M4 7v3a4 4 0 008 0V7H4z" />
-    </svg>
-  )
-}
-function IconPress() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="1" y="4" width="14" height="8" rx="1" />
-      <line x1="4" y1="8" x2="5" y2="8" />
-      <line x1="7.5" y1="8" x2="8.5" y2="8" />
-      <line x1="11" y1="8" x2="12" y2="8" />
-      <line x1="5.5" y1="10" x2="10.5" y2="10" />
-    </svg>
-  )
-}
-function IconWait() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="6" />
-      <path d="M8 5v3l2.5 1.5" />
-    </svg>
-  )
-}
-function IconExtract() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V5L9 1z" />
-      <path d="M9 1v4h4" />
-      <line x1="5" y1="9" x2="11" y2="9" />
-      <line x1="5" y1="12" x2="8" y2="12" />
-    </svg>
-  )
-}
-function IconScreenshot() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="1" y="4" width="14" height="10" rx="1" />
-      <circle cx="8" cy="9" r="2.5" />
-      <path d="M5 4l1.5-2h3L11 4" />
-    </svg>
-  )
-}
-function IconDefault() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="6" />
-      <line x1="8" y1="6" x2="8" y2="8" />
-      <line x1="8" y1="10.5" x2="8" y2="11" />
-    </svg>
-  )
-}
-
-function ActionIcon({ type }: { type: string }) {
-  switch (type) {
-    case 'goto': return <IconGoto />
-    case 'click': return <IconClick />
-    case 'type': return <IconType />
-    case 'select': return <IconSelect />
-    case 'scroll': return <IconScroll />
-    case 'hover': return <IconHover />
-    case 'press':
-    case 'pressKey': return <IconPress />
-    case 'wait_for_selector':
-    case 'wait_for_text': return <IconWait />
-    case 'extract': return <IconExtract />
-    case 'screenshot': return <IconScreenshot />
-    default: return <IconDefault />
-  }
-}
-
-// ── Status helpers ────────────────────────────────────────────────────────────
-
-const STATUS_COLOR: Record<string, string> = {
-  pending: '#2a2a2a',
-  running: '#3b82f6',
-  done: '#22c55e',
-  failed: '#ef4444',
-  awaiting_approval: '#a855f7',
-  skipped: '#374151',
-}
-
-const TASK_STATUS_LABEL: Record<string, string> = {
-  idle: 'idle',
-  submitting: 'submitting',
-  planning: 'planning',
-  streaming: 'running',
-  done: 'done',
-  failed: 'failed',
-  cancelled: 'cancelled',
-  awaiting_approval: 'awaiting approval',
-  error: 'error',
-}
-
-function StepStatusMark({ status }: { status: string }) {
-  if (status === 'running') return <DotSpinner />
-  if (status === 'done') return <span style={{ color: '#22c55e' }}>✓</span>
-  if (status === 'failed') return <span style={{ color: '#ef4444' }}>✗</span>
-  if (status === 'awaiting_approval') return <span style={{ color: '#a855f7' }}>?</span>
-  return <span style={{ color: '#2a2a2a' }}>·</span>
-}
-
-function DotSpinner() {
-  return (
-    <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          style={{
-            display: 'inline-block',
-            width: 3,
-            height: 3,
-            background: '#3b82f6',
-            borderRadius: '50%',
-            animation: `dotPulse 1.2s ease-in-out ${i * 0.2}s infinite`,
-          }}
-        />
-      ))}
-    </span>
-  )
-}
-
-// ── Component ─────────────────────────────────────────────────────────────────
-
 interface Props {
   state: StreamState
 }
 
-export function LiveTaskView({ state }: Props) {
-  const { status, steps, durationMs, error, prompt } = state
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  idle: { label: 'Idle', color: '#64748b' },
+  submitting: { label: 'Submitting', color: '#60a5fa' },
+  planning: { label: 'Planning', color: '#60a5fa' },
+  streaming: { label: 'Working', color: '#60a5fa' },
+  done: { label: 'Done', color: '#22c55e' },
+  failed: { label: 'Failed', color: '#ef4444' },
+  cancelled: { label: 'Cancelled', color: '#f59e0b' },
+  awaiting_approval: { label: 'Needs approval', color: '#a855f7' },
+  error: { label: 'Error', color: '#ef4444' },
+}
 
-  const doneCount = steps.filter((s) => s.status === 'done').length
-  const failedCount = steps.filter((s) => s.status === 'failed').length
+const STEP_STATUS_META: Record<string, { label: string; color: string }> = {
+  pending: { label: 'Pending', color: '#64748b' },
+  running: { label: 'Running', color: '#60a5fa' },
+  done: { label: 'Done', color: '#22c55e' },
+  failed: { label: 'Failed', color: '#ef4444' },
+  awaiting_approval: { label: 'Approval', color: '#a855f7' },
+  skipped: { label: 'Skipped', color: '#94a3b8' },
+}
+
+export function LiveTaskView({ state }: Props) {
+  const meta = STATUS_META[state.status] ?? STATUS_META.idle
+  const doneCount = state.steps.filter((step) => step.status === 'done').length
+  const failedCount = state.steps.filter((step) => step.status === 'failed').length
+  const activeStep = state.steps.find((step) => step.status === 'running' || step.status === 'awaiting_approval')
   const answer = buildAnswer(state)
 
-  const isActive =
-    status === 'streaming' || status === 'planning' || status === 'submitting'
-  const isTerminal =
-    status === 'done' || status === 'failed' || status === 'cancelled' || status === 'error'
-
-  const headerAccentColor =
-    status === 'done'
-      ? '#22c55e'
-      : status === 'failed' || status === 'error'
-        ? '#ef4444'
-        : status === 'cancelled'
-          ? '#f59e0b'
-          : status === 'awaiting_approval'
-            ? '#a855f7'
-            : '#3b82f6'
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div
         style={{
-          padding: '8px 12px',
-          background: '#0c0c0c',
-          borderTop: `2px solid ${headerAccentColor}`,
-          border: '1px solid #1e1e1e',
-          borderTopColor: headerAccentColor,
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
+          flexDirection: 'column',
+          gap: 12,
+          padding: 16,
+          background: 'var(--panel)',
+          border: '1px solid var(--border)',
+          borderRadius: 18,
+          boxShadow: 'var(--shadow)',
+          overflow: 'hidden',
+          position: 'relative',
         }}
       >
         <div
           style={{
-            fontSize: 12,
-            color: '#6b7280',
-            flex: 1,
-            overflow: 'hidden',
-            whiteSpace: 'nowrap',
-            textOverflow: 'ellipsis',
+            position: 'absolute',
+            inset: '0 auto auto 0',
+            width: '100%',
+            height: 1,
+            background: `linear-gradient(90deg, ${meta.color}, transparent 65%)`,
+            opacity: 0.95,
           }}
-          title={prompt}
-        >
-          {prompt}
+        />
+
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+            <AssistantGlyph color={meta.color} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, marginBottom: 3 }}>Browser Assistant</div>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: 'var(--text)',
+                  fontWeight: 600,
+                  lineHeight: 1.35,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+                title={state.prompt}
+              >
+                {getAssistantMessage(state)}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <StatusPill label={meta.label} color={meta.color} />
+            {state.durationMs !== null && (
+              <span style={{ fontSize: 11, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+                {(state.durationMs / 1000).toFixed(1)}s
+              </span>
+            )}
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {isActive && (
-            <span
-              style={{
-                display: 'inline-block',
-                width: 5,
-                height: 5,
-                background: '#3b82f6',
-                animation: 'pulse 1s ease-in-out infinite',
-              }}
-            />
-          )}
-          <span
-            style={{
-              fontSize: 11,
-              color: STATUS_COLOR[status] ?? '#666',
-              fontFamily: 'monospace',
-              letterSpacing: '0.03em',
-            }}
-          >
-            {TASK_STATUS_LABEL[status] ?? status}
-          </span>
-          {durationMs !== null && (
-            <span style={{ fontSize: 10, color: '#333', fontFamily: 'monospace' }}>
-              {(durationMs / 1000).toFixed(1)}s
-            </span>
-          )}
+
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.5,
+            color: 'var(--text-soft)',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+            padding: '12px 13px',
+          }}
+        >
+          {state.prompt}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Metric label="Done" value={String(doneCount)} color="#22c55e" />
+          <Metric label="Failed" value={String(failedCount)} color="#ef4444" />
+          <Metric label="Total" value={String(state.stepCount || state.steps.length)} color="#94a3b8" />
+          {activeStep && <Metric label="Active" value={`Step ${activeStep.index + 1}`} color="#60a5fa" />}
         </div>
       </div>
 
-      {/* Steps */}
-      {steps.length > 0 && (
+      {(state.status === 'streaming' || state.status === 'planning' || state.status === 'submitting') && state.steps.length === 0 && (
         <div
           style={{
-            border: '1px solid #1e1e1e',
-            borderTop: 'none',
-            background: '#090909',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '12px 14px',
+            background: 'var(--panel)',
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+            color: 'var(--text-soft)',
+            fontSize: 12,
           }}
         >
-          {steps.map((step, i) => {
+          <OrbitDots />
+          {state.status === 'planning' ? 'Grounding on the page and building the plan...' : 'Connecting the task to the runner...'}
+        </div>
+      )}
+
+      {state.steps.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}
+        >
+          {state.steps.map((step) => {
+            const stepMeta = STEP_STATUS_META[step.status] ?? STEP_STATUS_META.pending
             const active = step.status === 'running' || step.status === 'awaiting_approval'
-            const statusColor = STATUS_COLOR[step.status] ?? '#2a2a2a'
 
             return (
               <div
                 key={step.index}
                 style={{
                   display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 8,
-                  padding: '6px 12px',
-                  borderBottom: i < steps.length - 1 ? '1px solid #0f0f0f' : 'none',
-                  borderLeft: `2px solid ${active ? statusColor : 'transparent'}`,
-                  background: active ? '#0d0d16' : 'transparent',
+                  gap: 12,
+                  padding: '12px 13px',
+                  background: active ? 'var(--panel-soft)' : 'var(--panel)',
+                  border: `1px solid ${active ? '#88aef633' : 'var(--border)'}`,
+                  borderRadius: 16,
+                  boxShadow: active ? '0 14px 28px rgba(37,99,235,0.12)' : 'none',
                 }}
               >
-                <span
-                  style={{
-                    fontSize: 10,
-                    color: '#242424',
-                    minWidth: 14,
-                    paddingTop: 1,
-                    textAlign: 'right',
-                    fontFamily: 'monospace',
-                    flexShrink: 0,
-                  }}
-                >
-                  {step.index + 1}
-                </span>
-                <span
-                  style={{
-                    color: active ? '#4b5563' : '#2a2a2a',
-                    flexShrink: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    paddingTop: 1,
-                  }}
-                >
-                  <ActionIcon type={step.actionType} />
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                   <div
                     style={{
-                      fontSize: 12,
-                      color: active ? '#d1d5db' : '#4b5563',
-                      lineHeight: 1.35,
+                      width: 28,
+                      height: 28,
+                      borderRadius: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: active ? 'rgba(37,99,235,0.10)' : 'var(--surface)',
+                      border: `1px solid ${active ? 'rgba(37,99,235,0.20)' : 'var(--border)'}`,
+                      color: active ? '#60a5fa' : 'var(--muted)',
                     }}
                   >
-                    {step.description}
+                    <ActionIcon type={step.actionType} />
                   </div>
+                  <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600 }}>{step.index + 1}</div>
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, lineHeight: 1.35 }}>{step.description}</div>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: stepMeta.color, fontSize: 11, fontWeight: 600, flexShrink: 0 }}>
+                      {step.status === 'running' ? <OrbitDots compact /> : <StatusDot color={stepMeta.color} />}
+                      {stepMeta.label}
+                    </div>
+                  </div>
+
+                  {(step.targetLabel || step.elementRef || step.selector) && (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginBottom: 6,
+                        padding: '4px 8px',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 999,
+                        fontSize: 11,
+                        color: 'var(--muted)',
+                        maxWidth: '100%',
+                      }}
+                    >
+                      <TargetIcon />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {step.targetLabel ?? step.elementRef ?? step.selector}
+                      </span>
+                    </div>
+                  )}
+
                   {step.result && step.status === 'done' && step.actionType !== 'extract' && (
                     <div
                       style={{
                         fontSize: 11,
-                        color: '#374151',
-                        marginTop: 2,
-                        fontFamily: 'monospace',
+                        color: 'var(--text-soft)',
+                        lineHeight: 1.5,
+                        whiteSpace: 'pre-wrap',
                       }}
                     >
                       {step.result}
                     </div>
                   )}
+
                   {step.error && (
                     <div
                       style={{
+                        marginTop: 4,
+                        padding: '8px 9px',
+                        background: '#160a0a',
+                        border: '1px solid #3a1414',
+                        borderRadius: 12,
                         fontSize: 11,
-                        color: '#ef4444',
-                        marginTop: 2,
-                        fontFamily: 'monospace',
+                        color: '#fca5a5',
+                        lineHeight: 1.5,
                         whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
                       }}
                     >
                       {step.error}
                     </div>
                   )}
                 </div>
-                <span
-                  style={{
-                    fontSize: 11,
-                    flexShrink: 0,
-                    paddingTop: 1,
-                    minWidth: 14,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <StepStatusMark status={step.status} />
-                </span>
               </div>
             )
           })}
         </div>
       )}
 
-      {/* Thinking indicator */}
-      {isActive && steps.length === 0 && (
-        <div
-          style={{
-            padding: '8px 12px',
-            border: '1px solid #1e1e1e',
-            borderTop: 'none',
-            fontSize: 11,
-            color: '#374151',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            background: '#090909',
-          }}
-        >
-          <DotSpinner />
-          {status === 'planning' ? 'Building plan…' : 'Connecting…'}
-        </div>
-      )}
-
-      {/* Extracted text output */}
       {answer && (
         <div
           style={{
-            border: '1px solid #1e1e1e',
-            borderTop: 'none',
+            padding: 14,
+            background: 'var(--panel)',
+            border: '1px solid var(--border)',
+            borderRadius: 18,
+            boxShadow: 'var(--shadow-soft)',
           }}
         >
-          <div
-            style={{
-              padding: '4px 12px',
-              fontSize: 10,
-              color: '#2a2a2a',
-              background: '#090909',
-              borderBottom: '1px solid #111',
-              fontFamily: 'monospace',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-            }}
-          >
-            output
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <DocumentIcon />
+            <span style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>Assistant response</span>
           </div>
           <div
             style={{
-              padding: '10px 12px',
+              padding: '12px 13px',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
               fontSize: 12,
-              color: '#9ca3af',
-              fontFamily: '"JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, monospace',
+              color: 'var(--text-soft)',
               lineHeight: 1.65,
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
-              background: '#070707',
               maxHeight: 320,
               overflowY: 'auto',
             }}
@@ -417,43 +280,21 @@ export function LiveTaskView({ state }: Props) {
         </div>
       )}
 
-      {/* Summary footer */}
-      {isTerminal && steps.length > 0 && (
+      {state.error && (
         <div
           style={{
-            padding: '4px 12px',
-            border: '1px solid #1e1e1e',
-            borderTop: 'none',
-            display: 'flex',
-            gap: 10,
-            fontSize: 10,
-            color: '#2a2a2a',
-            background: '#090909',
-            fontFamily: 'monospace',
-          }}
-        >
-          <span style={{ color: '#22c55e' }}>{doneCount} done</span>
-          {failedCount > 0 && <span style={{ color: '#ef4444' }}>{failedCount} failed</span>}
-          <span>{steps.length} total</span>
-        </div>
-      )}
-
-      {/* Error */}
-      {error && (
-        <div
-          style={{
-            padding: '8px 12px',
-            border: '1px solid #ef444430',
-            borderTop: 'none',
+            padding: '12px 13px',
+            background: '#160a0a',
+            border: '1px solid #3a1414',
+            borderRadius: 14,
             fontSize: 12,
-            color: '#ef4444',
-            fontFamily: 'monospace',
-            background: '#080505',
+            color: '#fca5a5',
+            lineHeight: 1.55,
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
           }}
         >
-          {error}
+          {state.error}
         </div>
       )}
     </div>
@@ -462,11 +303,171 @@ export function LiveTaskView({ state }: Props) {
 
 function buildAnswer(state: StreamState) {
   const extracts = state.steps
-    .filter((s) => s.status === 'done' && s.actionType === 'extract' && s.result)
-    .map((s) => s.result!.trim())
+    .filter((step) => step.status === 'done' && step.actionType === 'extract' && step.result)
+    .map((step) => step.result!.trim())
     .filter(Boolean)
 
   if (extracts.length === 0) return ''
   const unique = Array.from(new Set(extracts))
-  return unique.length === 1 ? unique[0] : unique.join('\n\n---\n\n')
+  return unique.length === 1 ? unique[0] : unique.join('\n\n')
+}
+
+function getAssistantMessage(state: StreamState) {
+  const activeStep = state.steps.find((step) => step.status === 'running')
+  const pendingApproval = state.steps.find((step) => step.status === 'awaiting_approval')
+
+  if (state.status === 'planning') return 'Building a grounded plan for this page'
+  if (state.status === 'submitting') return 'Sending your task to the local runner'
+  if (state.status === 'awaiting_approval' && pendingApproval) return `Waiting for approval: ${pendingApproval.description}`
+  if (activeStep) return activeStep.description
+  if (state.status === 'done') return 'Finished working on the task'
+  if (state.status === 'failed') return 'The task hit an execution problem'
+  if (state.status === 'cancelled') return 'The task was cancelled'
+  if (state.status === 'error') return 'The connection needs recovery'
+  return 'Ready to read, click, type, and automate'
+}
+
+function Metric({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 7,
+        padding: '6px 9px',
+        borderRadius: 999,
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        fontSize: 11,
+        color: 'var(--text-soft)',
+      }}
+    >
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: `0 0 0 3px ${color}22` }} />
+      <span style={{ color: 'var(--muted)' }}>{label}</span>
+      <span style={{ fontWeight: 600, color: 'var(--text)' }}>{value}</span>
+    </div>
+  )
+}
+
+function StatusPill({ label, color }: { label: string; color: string }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 9px',
+        borderRadius: 999,
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        fontSize: 11,
+        fontWeight: 600,
+        color: 'var(--text)',
+      }}
+    >
+      <StatusDot color={color} />
+      {label}
+    </span>
+  )
+}
+
+function StatusDot({ color }: { color: string }) {
+  return <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+}
+
+function AssistantGlyph({ color }: { color: string }) {
+  return (
+    <div
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: '50%',
+        background: `radial-gradient(circle at 35% 35%, #e0f2fe, ${color} 58%, #0f172a)`,
+        boxShadow: `0 0 0 6px ${color}16`,
+        flexShrink: 0,
+      }}
+    />
+  )
+}
+
+function OrbitDots({ compact = false }: { compact?: boolean }) {
+  return (
+    <span style={{ display: 'inline-flex', gap: compact ? 3 : 4, alignItems: 'center' }}>
+      {[0, 1, 2].map((index) => (
+        <span
+          key={index}
+          style={{
+            width: compact ? 4 : 5,
+            height: compact ? 4 : 5,
+            borderRadius: '50%',
+            background: '#60a5fa',
+            animation: `dotPulse 1.2s ease-in-out ${index * 0.18}s infinite`,
+          }}
+        />
+      ))}
+    </span>
+  )
+}
+
+function ActionIcon({ type }: { type: string }) {
+  const common = {
+    width: 15,
+    height: 15,
+    viewBox: '0 0 16 16',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.6,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  }
+
+  switch (type) {
+    case 'goto':
+      return <svg {...common}><path d="M2 8h10" /><path d="M8.5 4.5 12 8l-3.5 3.5" /></svg>
+    case 'click':
+      return <svg {...common}><path d="M4 2.5 12 8 8.2 9.1 6.6 13.5 4 2.5Z" /></svg>
+    case 'type':
+      return <svg {...common}><path d="M3 4.5h10" /><path d="M6.2 4.5v7" /><path d="M9.8 4.5v7" /><path d="M4.8 11.5h6.4" /></svg>
+    case 'select':
+      return <svg {...common}><rect x="2.5" y="3" width="11" height="9.5" rx="2" /><path d="m6 7 2 2 2-2" /></svg>
+    case 'scroll':
+      return <svg {...common}><path d="M8 2.5v11" /><path d="m5 5.5 3-3 3 3" /><path d="m5 10.5 3 3 3-3" /></svg>
+    case 'hover':
+      return <svg {...common}><path d="M6 2.5v5" /><path d="M8.5 4v3" /><path d="M11 5.5v1.5" /><path d="M4 8.5h8v1a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3Z" /></svg>
+    case 'press':
+    case 'pressKey':
+      return <svg {...common}><rect x="2" y="4" width="12" height="8" rx="2" /><path d="M5 8h6" /></svg>
+    case 'wait_for_selector':
+    case 'wait_for_text':
+      return <svg {...common}><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3l2 1.5" /></svg>
+    case 'extract':
+      return <svg {...common}><path d="M4 2.5h5l3 3v8H4z" /><path d="M9 2.5v3h3" /><path d="M5.5 9h5" /><path d="M5.5 11.5h3.5" /></svg>
+    case 'screenshot':
+      return <svg {...common}><rect x="2" y="4.5" width="12" height="8" rx="2" /><circle cx="8" cy="8.5" r="2.2" /><path d="M5.5 4.5 6.8 3h2.4l1.3 1.5" /></svg>
+    default:
+      return <svg {...common}><circle cx="8" cy="8" r="5.5" /><path d="M8 6v2" /><path d="M8 10.5h.01" /></svg>
+  }
+}
+
+function TargetIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="4.5" />
+      <path d="M8 1.5v2" />
+      <path d="M8 12.5v2" />
+      <path d="M1.5 8h2" />
+      <path d="M12.5 8h2" />
+    </svg>
+  )
+}
+
+function DocumentIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--muted)' }}>
+      <path d="M4 2.5h5l3 3v8H4z" />
+      <path d="M9 2.5v3h3" />
+      <path d="M5.5 9h5" />
+      <path d="M5.5 11.5h3.5" />
+    </svg>
+  )
 }

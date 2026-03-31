@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { Action, ActionSensitivity } from '@browser-automation/shared'
 
 interface Props {
@@ -6,12 +7,12 @@ interface Props {
   onApprove: (taskId: string, stepIndex: number, approved: boolean) => void
 }
 
-const SENSITIVITY: Record<ActionSensitivity, { color: string; label: string; icon: string }> = {
-  none: { color: '#a855f7', label: 'Action', icon: '!' },
-  submit: { color: '#f59e0b', label: 'Form Submit', icon: 'UP' },
-  delete: { color: '#ef4444', label: 'Delete', icon: 'DL' },
-  payment: { color: '#ef4444', label: 'Payment', icon: '$' },
-  send: { color: '#f59e0b', label: 'Send / Publish', icon: 'SN' },
+const SENSITIVITY: Record<ActionSensitivity, { color: string; label: string }> = {
+  none: { color: '#a855f7', label: 'Action' },
+  submit: { color: '#f59e0b', label: 'Form submit' },
+  delete: { color: '#ef4444', label: 'Delete' },
+  payment: { color: '#ef4444', label: 'Payment' },
+  send: { color: '#f59e0b', label: 'Send or publish' },
 }
 
 export function ApprovalModal({ taskId, step, onApprove }: Props) {
@@ -23,142 +24,173 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.75)',
+        background: 'rgba(3,7,18,0.52)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 999,
-        padding: 16,
+        padding: 18,
+        backdropFilter: 'blur(10px)',
       }}
     >
       <div
         style={{
-          background: '#1e1e2e',
-          border: `1px solid ${cfg.color}`,
-          borderRadius: 12,
-          padding: 20,
-          maxWidth: 340,
           width: '100%',
-          boxShadow: `0 0 40px ${cfg.color}33`,
+          maxWidth: 420,
+          background: 'var(--panel)',
+          border: '1px solid var(--border)',
+          borderRadius: 22,
+          boxShadow: 'var(--shadow)',
+          overflow: 'hidden',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <span style={{ fontSize: 16, color: cfg.color, fontWeight: 700, minWidth: 18 }}>{cfg.icon}</span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#e2e8f0' }}>Approval Required</div>
-            <div style={{ fontSize: 11, color: cfg.color, fontWeight: 600, marginTop: 1 }}>{cfg.label}</div>
-          </div>
-        </div>
-
-        {step.action.approvalReason && (
-          <div
-            style={{
-              background: `${cfg.color}15`,
-              border: `1px solid ${cfg.color}33`,
-              borderRadius: 6,
-              padding: '7px 10px',
-              marginBottom: 12,
-              fontSize: 12,
-              color: '#cbd5e1',
-              lineHeight: 1.5,
-            }}
-          >
-            {step.action.approvalReason}
-          </div>
-        )}
-
         <div
           style={{
-            background: '#0f0f1a',
-            border: '1px solid #2d2d44',
-            borderRadius: 8,
-            padding: '10px 12px',
-            marginBottom: 16,
+            padding: '16px 18px 14px',
+            borderBottom: '1px solid var(--border)',
+            background: `linear-gradient(180deg, ${cfg.color}12, transparent)`,
           }}
         >
-          <div style={{ fontSize: 11, color: cfg.color, fontWeight: 600, marginBottom: 4 }}>
-            Step {step.step + 1} · {step.action.type.toUpperCase()}
-          </div>
-          <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.4 }}>{step.action.description}</div>
-
-          {step.action.elementRef && (
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 5 }}>
-              Ref:{' '}
-              <code style={{ color: '#94a3b8', background: '#0a0a14', padding: '1px 4px', borderRadius: 3 }}>
-                {step.action.elementRef}
-              </code>
-            </div>
-          )}
-
-          {step.action.selector && (
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 5 }}>
-              Target:{' '}
-              <code style={{ color: '#94a3b8', background: '#0a0a14', padding: '1px 4px', borderRadius: 3 }}>
-                {step.action.selector}
-              </code>
-            </div>
-          )}
-
-          {step.action.value && (
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>
-              Value:{' '}
-              <code style={{ color: '#94a3b8', background: '#0a0a14', padding: '1px 4px', borderRadius: 3 }}>
-                "{step.action.value}"
-              </code>
-            </div>
-          )}
-
-          {step.action.url && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
             <div
               style={{
-                fontSize: 11,
-                color: '#64748b',
-                marginTop: 3,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                background: cfg.color,
+                boxShadow: `0 0 0 6px ${cfg.color}18`,
+                flexShrink: 0,
               }}
-            >
-              URL: <span style={{ color: '#94a3b8' }}>{step.action.url}</span>
-            </div>
-          )}
+            />
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Approval required</div>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-soft)', lineHeight: 1.5 }}>
+            The assistant wants to continue with a sensitive step. Review the target below before approving.
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => onApprove(taskId, step.step, false)}
+        <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div
             style={{
-              flex: 1,
-              background: '#1e1e2e',
-              border: '1px solid #ef4444',
-              color: '#ef4444',
-              borderRadius: 8,
-              padding: '9px 0',
-              fontSize: 13,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              alignSelf: 'flex-start',
+              padding: '5px 9px',
+              borderRadius: 999,
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              color: cfg.color,
+              fontSize: 11,
               fontWeight: 600,
-              cursor: 'pointer',
             }}
           >
-            Deny
-          </button>
-          <button
-            onClick={() => onApprove(taskId, step.step, true)}
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: cfg.color }} />
+            {cfg.label}
+          </div>
+
+          {step.action.approvalReason && (
+            <div
+              style={{
+                padding: '10px 12px',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                fontSize: 12,
+                color: 'var(--text-soft)',
+                lineHeight: 1.55,
+              }}
+            >
+              {step.action.approvalReason}
+            </div>
+          )}
+
+          <div
             style={{
-              flex: 1,
-              background: cfg.color,
-              border: 'none',
-              color: '#fff',
-              borderRadius: 8,
-              padding: '9px 0',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
+              padding: '12px 13px',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 16,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
             }}
           >
-            Approve
-          </button>
+            <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>
+              Step {step.step + 1} · {step.action.type}
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.45, fontWeight: 600 }}>
+              {step.action.description}
+            </div>
+
+            {step.action.elementRef && <MetaRow label="Ref" value={step.action.elementRef} />}
+            {step.action.selector && <MetaRow label="Target" value={step.action.selector} />}
+            {step.action.value && <MetaRow label="Value" value={step.action.value} />}
+            {step.action.url && <MetaRow label="URL" value={step.action.url} />}
+          </div>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => onApprove(taskId, step.step, false)} style={denyButtonStyle}>
+              Deny
+            </button>
+            <button
+              onClick={() => onApprove(taskId, step.step, true)}
+              style={{
+                ...approveButtonStyle,
+                background: cfg.color,
+                boxShadow: `0 12px 24px ${cfg.color}22`,
+              }}
+            >
+              Approve
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
+}
+
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600 }}>{label}</div>
+      <div
+        style={{
+          fontSize: 12,
+          color: 'var(--text-soft)',
+          lineHeight: 1.5,
+          wordBreak: 'break-word',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          padding: '7px 9px',
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  )
+}
+
+const denyButtonStyle: CSSProperties = {
+  flex: 1,
+  background: 'var(--surface)',
+  border: '1px solid var(--danger-border)',
+  color: 'var(--danger)',
+  borderRadius: 999,
+  padding: '10px 0',
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: 'pointer',
+}
+
+const approveButtonStyle: CSSProperties = {
+  flex: 1,
+  border: 'none',
+  color: '#ffffff',
+  borderRadius: 999,
+  padding: '10px 0',
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: 'pointer',
 }

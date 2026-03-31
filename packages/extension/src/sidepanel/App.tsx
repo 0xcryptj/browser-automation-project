@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { getDefaultObservationOptions } from '@browser-automation/shared'
-import type { ObservationOptions, PageObservation } from '@browser-automation/shared'
+import type { ExtensionSettings, ObservationOptions, PageObservation } from '@browser-automation/shared'
 import { useTaskStream } from './hooks/useTaskStream.js'
 import { TaskInput } from './components/TaskInput.js'
 import { LiveTaskView } from './components/LiveTaskView.js'
@@ -10,36 +11,47 @@ import { AssistPanel } from './panels/AssistPanel.js'
 import { TaskHistory } from './panels/TaskHistory.js'
 import { SettingsPanel } from './panels/SettingsPanel.js'
 import { ObservationViewer } from './panels/ObservationViewer.js'
-import { addHistoryEntry, getSettings } from '../lib/storage.js'
+import { addHistoryEntry, getSettings, saveSettings } from '../lib/storage.js'
 import { runnerClient } from '../lib/runnerClient.js'
 
 type Tab = 'tasks' | 'assist' | 'observe' | 'history' | 'settings'
 type RunnerStatus = 'checking' | 'connected' | 'disconnected'
+type ResolvedTheme = 'dark' | 'light'
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'tasks', label: 'Tasks' },
-  { id: 'assist', label: 'Assist' },
-  { id: 'observe', label: 'Observe' },
-  { id: 'history', label: 'History' },
-  { id: 'settings', label: 'Settings' },
+const NAV_ITEMS: Array<{ id: Tab; label: string; description: string }> = [
+  { id: 'tasks', label: 'Tasks', description: 'Run browser actions and ask follow-up questions.' },
+  { id: 'assist', label: 'Assist', description: 'Summaries, dates, warnings, and next steps.' },
+  { id: 'observe', label: 'Observe', description: 'Inspect the current page snapshot and refs.' },
+  { id: 'history', label: 'History', description: 'Rerun or review recent tasks.' },
+  { id: 'settings', label: 'Settings', description: 'Runner, browser target, provider, and profile.' },
 ]
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('tasks')
+  const [menuOpen, setMenuOpen] = useState(false)
   const [runnerStatus, setRunnerStatus] = useState<RunnerStatus>('checking')
   const [runnerUrl, setRunnerUrl] = useState('http://localhost:3000')
   const [runnerDetails, setRunnerDetails] = useState<string | null>(null)
   const [runnerWarning, setRunnerWarning] = useState<string | null>(null)
+  const [extensionSettings, setExtensionSettings] = useState<ExtensionSettings | null>(null)
   const [pageObservation, setPageObservation] = useState<PageObservation | null>(null)
   const [observeLoading, setObserveLoading] = useState(false)
   const [pageAccessMessage, setPageAccessMessage] = useState<string | null>(null)
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>('dark')
   const { state, submitTask, approve, cancel, reset, retryStream } = useTaskStream()
   const prevStatus = useRef(state.status)
+
+  const resolvedTheme: ResolvedTheme = useMemo(() => {
+    if (extensionSettings?.theme === 'light') return 'light'
+    if (extensionSettings?.theme === 'dark') return 'dark'
+    return systemTheme
+  }, [extensionSettings?.theme, systemTheme])
 
   const checkRunner = useCallback(async () => {
     setRunnerStatus('checking')
     try {
       const settings = await getSettings()
+      setExtensionSettings(settings)
       const baseUrl = settings.runnerBaseUrl.replace(/\/$/, '')
       setRunnerUrl(baseUrl)
 
@@ -48,14 +60,25 @@ export default function App() {
       setRunnerWarning(health.browserTarget?.warning ?? health.planner.warning ?? null)
       setRunnerDetails(
         health.browser?.browserConnected
-          ? `Runner ready. Planner: ${health.planner.provider}/${health.planner.model ?? 'default'} · Browser: ${health.browserTarget?.mode ?? 'launch'}${health.browser.activePageUrl ? ` on ${safeHostname(health.browser.activePageUrl)}` : ''}`
-          : `Runner connected. Planner: ${health.planner.provider}/${health.planner.model ?? 'default'} · Browser: ${health.browserTarget?.mode ?? 'launch'}${health.browserTarget?.mode === 'attach' ? ' (waiting for your Brave or Chrome session)' : '. Browser launches on first task.'}`
+          ? `${health.planner.provider}/${health.planner.model ?? 'default'} · ${health.browserTarget?.mode ?? 'launch'}${health.browser.activePageUrl ? ` on ${safeHostname(health.browser.activePageUrl)}` : ''}`
+          : `${health.planner.provider}/${health.planner.model ?? 'default'} · ${health.browserTarget?.mode ?? 'launch'}`
       )
     } catch {
       setRunnerStatus('disconnected')
       setRunnerDetails(null)
       setRunnerWarning(null)
     }
+  }, [])
+
+  useEffect(() => {
+    void getSettings().then(setExtensionSettings)
+
+    const media = window.matchMedia('(prefers-color-scheme: light)')
+    const updateTheme = () => setSystemTheme(media.matches ? 'light' : 'dark')
+    updateTheme()
+    media.addEventListener('change', updateTheme)
+
+    return () => media.removeEventListener('change', updateTheme)
   }, [])
 
   useEffect(() => {
@@ -103,9 +126,6 @@ export default function App() {
       const options: ObservationOptions = getDefaultObservationOptions(mode)
       const observation = await new Promise<PageObservation | null>((resolve) => {
         chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTEXT', options }, (response) => {
-          // Require timestamp to distinguish a full observation from the background
-          // fallback stub { url, title } that is returned when the content script
-          // cannot inject (restricted pages, new-tab, etc.).
           if (
             chrome.runtime.lastError ||
             !response ||
@@ -115,7 +135,7 @@ export default function App() {
             setPageAccessMessage(
               chrome.runtime.lastError?.message ??
                 response?.error ??
-                'The assistant could not inspect this tab. Try a normal web page instead of a browser-internal page.'
+                'The assistant could not inspect this tab. Try a normal website instead of a browser-internal page.'
             )
             resolve(null)
             return
@@ -135,11 +155,10 @@ export default function App() {
 
   const handleSubmit = useCallback(
     async (prompt: string) => {
-      if (runnerStatus !== 'connected') {
-        return
-      }
+      if (runnerStatus !== 'connected') return
 
       setTab('tasks')
+      setMenuOpen(false)
 
       let observation: PageObservation | null = null
       try {
@@ -155,15 +174,16 @@ export default function App() {
         return
       }
 
-      await submitTask(prompt, observation, 'standard')
+      await submitTask(prompt, observation, extensionSettings?.defaultMode ?? 'standard')
     },
-    [collectPage, runnerStatus, submitTask]
+    [collectPage, extensionSettings?.defaultMode, runnerStatus, submitTask]
   )
 
   const handleRerun = useCallback(
     (prompt: string) => {
       reset()
       setTab('tasks')
+      setMenuOpen(false)
       setTimeout(() => {
         void handleSubmit(prompt)
       }, 50)
@@ -184,15 +204,23 @@ export default function App() {
     state.status === 'cancelled' ||
     state.steps.length > 0
 
+  const themeVars = resolvedTheme === 'light' ? lightThemeVars : darkThemeVars
+  const currentTabMeta = NAV_ITEMS.find((item) => item.id === tab) ?? NAV_ITEMS[0]
+  const topBanner = runnerStatus === 'disconnected'
+    ? `Runner offline at ${runnerUrl}. Start it with pnpm runner:dev.`
+    : runnerWarning ?? pageAccessMessage
+
   return (
     <div
       style={{
+        ...themeVars,
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
         overflow: 'hidden',
-        background: '#0a0a0a',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        background: 'var(--bg)',
+        color: 'var(--text)',
+        fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, sans-serif',
       }}
     >
       <div
@@ -200,287 +228,268 @@ export default function App() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '9px 14px',
-          borderBottom: '1px solid #1a1a1a',
+          padding: '12px 14px',
+          borderBottom: '1px solid var(--border)',
           flexShrink: 0,
+          background: 'var(--header-bg)',
+          backdropFilter: 'blur(12px)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <div
             style={{
-              display: 'inline-block',
-              width: 8,
-              height: 8,
-              background: '#6366f1',
+              width: 14,
+              height: 14,
+              borderRadius: '50%',
+              background: 'radial-gradient(circle at 35% 35%, #bfdbfe, #2563eb 62%, #0f172a)',
+              boxShadow: '0 0 0 6px rgba(37,99,235,0.10)',
               flexShrink: 0,
             }}
           />
-          <span style={{ fontSize: 12, fontWeight: 500, color: '#4b5563', letterSpacing: '0.04em', fontFamily: 'monospace' }}>
-            browser-operator
-          </span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em' }}>Browser Operator</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {currentTabMeta.label} · {currentTabMeta.description}
+            </div>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {tab === 'tasks' && hasResult && !isRunning && (
-            <button
-              onClick={reset}
-              style={{
-                background: 'none',
-                border: '1px solid #1e1e1e',
-                borderRadius: 0,
-                color: '#4b5563',
-                fontSize: 11,
-                padding: '3px 8px',
-                cursor: 'pointer',
-              }}
-            >
-              New
-            </button>
-          )}
-
           {tab === 'tasks' && isRunning && (
-            <button
-              onClick={() => void cancel()}
-              style={{
-                background: 'none',
-                border: '1px solid #ef444430',
-                borderRadius: 0,
-                color: '#ef4444',
-                fontSize: 11,
-                padding: '3px 8px',
-                cursor: 'pointer',
-              }}
-            >
+            <button onClick={() => void cancel()} style={dangerButtonStyle}>
               Cancel
             </button>
           )}
 
           <button
             onClick={() => void checkRunner()}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
             title="Check runner connection"
           >
             <StatusBadge status={runnerStatus} />
           </button>
+
+          <button
+            onClick={() => setMenuOpen((open) => !open)}
+            style={menuButtonStyle}
+            title="Open menu"
+          >
+            <HamburgerIcon />
+          </button>
         </div>
       </div>
-
-      {runnerStatus === 'disconnected' && (
-        <div
-          style={{
-            background: '#0c0505',
-            padding: '5px 14px',
-            fontSize: 11,
-            color: '#ef4444',
-            borderBottom: '1px solid #ef444420',
-            flexShrink: 0,
-            fontFamily: 'monospace',
-          }}
-        >
-          Runner offline at <code style={{ opacity: 0.7 }}>{runnerUrl}</code> — run{' '}
-          <code style={{ opacity: 0.7 }}>pnpm runner:dev</code>
-        </div>
-      )}
 
       {runnerStatus === 'connected' && runnerDetails && (
         <div
           style={{
-            background: '#050c08',
-            padding: '5px 14px',
-            fontSize: 10,
-            color: '#16a34a',
-            borderBottom: '1px solid #16a34a20',
+            padding: '8px 14px 0',
+            fontSize: 11,
+            color: 'var(--muted)',
             flexShrink: 0,
-            fontFamily: 'monospace',
-            letterSpacing: '0.02em',
           }}
         >
           {runnerDetails}
         </div>
       )}
 
-      {runnerStatus === 'connected' && runnerWarning && (
-        <div
-          style={{
-            background: '#0c0a00',
-            padding: '5px 14px',
-            fontSize: 10,
-            color: '#ca8a04',
-            borderBottom: '1px solid #ca8a0420',
-            flexShrink: 0,
-            fontFamily: 'monospace',
-          }}
-        >
-          {runnerWarning}
-        </div>
+      {topBanner && (
+        <Banner tone={runnerStatus === 'disconnected' ? 'danger' : 'warning'}>
+          {topBanner}
+        </Banner>
       )}
-
-      {pageAccessMessage && (
-        <div
-          style={{
-            background: '#0c0a00',
-            padding: '5px 14px',
-            fontSize: 10,
-            color: '#ca8a04',
-            borderBottom: '1px solid #ca8a0420',
-            flexShrink: 0,
-            fontFamily: 'monospace',
-          }}
-        >
-          {pageAccessMessage}
-        </div>
-      )}
-
-      <div
-        style={{
-          display: 'flex',
-          borderBottom: '1px solid #1a1a1a',
-          flexShrink: 0,
-          overflowX: 'auto',
-        }}
-      >
-        {TABS.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            style={{
-              background: 'none',
-              border: 'none',
-              borderBottom: tab === id ? '1px solid #6366f1' : '1px solid transparent',
-              color: tab === id ? '#9ca3af' : '#374151',
-              fontSize: 11,
-              fontWeight: 500,
-              padding: '7px 12px',
-              cursor: 'pointer',
-              flexShrink: 0,
-              transition: 'color 0.1s',
-            }}
-          >
-            {label}
-            {id === 'tasks' && isRunning && (
-              <span
-                style={{
-                  display: 'inline-block',
-                  width: 5,
-                  height: 5,
-                  borderRadius: '50%',
-                  background: '#f59e0b',
-                  marginLeft: 5,
-                  verticalAlign: 'middle',
-                  animation: 'pulse 1s ease-in-out infinite',
-                }}
-              />
-            )}
-          </button>
-        ))}
-      </div>
 
       <div
         style={{
           flex: 1,
-          overflowY: 'auto',
-          padding: 14,
+          overflow: 'hidden',
+          position: 'relative',
         }}
       >
-        {tab === 'tasks' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <TaskInput onSubmit={handleSubmit} disabled={isRunning || runnerStatus !== 'connected'} />
-
-            {hasResult && <LiveTaskView state={state} />}
-
-            {state.status === 'error' && state.taskId && (
-              <button
-                onClick={() => void retryStream()}
-                style={{
-                  alignSelf: 'flex-start',
-                  background: 'transparent',
-                  border: '1px solid #1e1e1e',
-                  borderRadius: 0,
-                  color: '#4b5563',
-                  fontSize: 11,
-                  padding: '5px 10px',
-                  cursor: 'pointer',
-                }}
-              >
-                Retry Stream
-              </button>
-            )}
-
-            {state.status === 'error' && !state.taskId && state.prompt && (
-              <button
-                onClick={() => void handleSubmit(state.prompt)}
-                style={{
-                  alignSelf: 'flex-start',
-                  background: 'transparent',
-                  border: '1px solid #1e1e1e',
-                  borderRadius: 0,
-                  color: '#4b5563',
-                  fontSize: 11,
-                  padding: '5px 10px',
-                  cursor: 'pointer',
-                }}
-              >
-                Try again
-              </button>
-            )}
-
-            {!hasResult && (
-              <div
-                style={{
-                  fontSize: 11,
-                  padding: '16px 0',
-                  userSelect: 'none',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                }}
-              >
-                <div style={{ color: '#222', marginBottom: 8, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'monospace' }}>
-                  examples
+        {menuOpen && (
+          <>
+            <div
+              onClick={() => setMenuOpen(false)}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'rgba(0,0,0,0.22)',
+                zIndex: 20,
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                width: 280,
+                maxWidth: 'calc(100% - 20px)',
+                background: 'var(--panel)',
+                border: '1px solid var(--border)',
+                borderRadius: 20,
+                boxShadow: 'var(--shadow)',
+                zIndex: 21,
+                overflow: 'hidden',
+              }}
+            >
+              <div style={{ padding: 14, borderBottom: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Menu</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                  Theme: {extensionSettings?.theme ?? 'system'} · Browser: {runnerDetails ?? 'checking...'}
                 </div>
-                {[
-                  'Go to example.com',
-                  'Extract the main heading',
-                  'Search for TypeScript on google.com',
-                  'Take a screenshot of this page',
-                ].map((examplePrompt) => (
+              </div>
+
+              <div style={{ padding: 8 }}>
+                {NAV_ITEMS.map((item) => (
                   <button
-                    key={examplePrompt}
-                    onClick={() => void handleSubmit(examplePrompt)}
-                    disabled={isRunning || runnerStatus !== 'connected'}
+                    key={item.id}
+                    onClick={() => {
+                      setTab(item.id)
+                      setMenuOpen(false)
+                    }}
                     style={{
-                      background: 'transparent',
-                      border: '1px solid #141414',
-                      borderRadius: 0,
-                      color: '#333',
-                      fontSize: 11,
-                      padding: '5px 10px',
-                      cursor: isRunning || runnerStatus !== 'connected' ? 'not-allowed' : 'pointer',
+                      width: '100%',
                       textAlign: 'left',
-                      fontFamily: 'monospace',
+                      background: item.id === tab ? 'var(--panel-soft)' : 'transparent',
+                      border: '1px solid transparent',
+                      borderRadius: 14,
+                      padding: '10px 11px',
+                      cursor: 'pointer',
+                      marginBottom: 4,
                     }}
                   >
-                    {examplePrompt}
+                    <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>{item.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{item.description}</div>
                   </button>
                 ))}
               </div>
-            )}
-          </div>
+
+              <div style={{ padding: '0 14px 14px', display: 'flex', gap: 8 }}>
+                {(['system', 'dark', 'light'] as const).map((themeOption) => (
+                  <button
+                    key={themeOption}
+                    onClick={async () => {
+                      const next = { ...(extensionSettings ?? (await getSettings())), theme: themeOption }
+                      setExtensionSettings(next)
+                      await saveSettings(next)
+                      setMenuOpen(false)
+                    }}
+                    style={{
+                      flex: 1,
+                      background: extensionSettings?.theme === themeOption ? 'var(--panel-soft)' : 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      color: 'var(--text)',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: '8px 0',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {capitalize(themeOption)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
         )}
 
-        {tab === 'assist' && <AssistPanel pageObservation={pageObservation} onCollectPage={collectPage} />}
+        <div
+          style={{
+            height: '100%',
+            overflowY: 'auto',
+            padding: 14,
+          }}
+        >
+          {tab === 'tasks' && (
+            <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', gap: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
+                {hasResult && <LiveTaskView state={state} />}
 
-        {tab === 'observe' && (
-          <ObservationViewer
-            observation={pageObservation}
-            onRefresh={collectPage}
-            loading={observeLoading}
-          />
-        )}
+                {state.status === 'error' && state.taskId && (
+                  <button onClick={() => void retryStream()} style={secondaryButtonStyle}>
+                    Retry stream
+                  </button>
+                )}
 
-        {tab === 'history' && <TaskHistory onRerun={handleRerun} />}
+                {state.status === 'error' && !state.taskId && state.prompt && (
+                  <button onClick={() => void handleSubmit(state.prompt)} style={secondaryButtonStyle}>
+                    Try again
+                  </button>
+                )}
 
-        {tab === 'settings' && <SettingsPanel />}
+                {!hasResult && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                      paddingTop: 2,
+                    }}
+                  >
+                    <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Try one of these</div>
+                    {[
+                      'Go to example.com',
+                      'Extract the main heading',
+                      'Search for TypeScript on google.com',
+                      'Take a screenshot of this page',
+                    ].map((examplePrompt) => (
+                      <button
+                        key={examplePrompt}
+                        onClick={() => void handleSubmit(examplePrompt)}
+                        disabled={isRunning || runnerStatus !== 'connected'}
+                        style={{
+                          background: 'var(--panel)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 14,
+                          color: 'var(--text-soft)',
+                          fontSize: 12,
+                          padding: '11px 12px',
+                          cursor: isRunning || runnerStatus !== 'connected' ? 'not-allowed' : 'pointer',
+                          textAlign: 'left',
+                          boxShadow: 'var(--shadow-soft)',
+                        }}
+                      >
+                        {examplePrompt}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div
+                style={{
+                  position: 'sticky',
+                  bottom: -14,
+                  margin: '0 -14px -14px',
+                  padding: '14px',
+                  background: 'linear-gradient(180deg, transparent 0%, var(--bg) 16%, var(--bg) 100%)',
+                  backdropFilter: 'blur(12px)',
+                }}
+              >
+                <TaskInput onSubmit={handleSubmit} disabled={isRunning || runnerStatus !== 'connected'} />
+              </div>
+            </div>
+          )}
+
+          {tab === 'assist' && <AssistPanel pageObservation={pageObservation} onCollectPage={collectPage} />}
+
+          {tab === 'observe' && (
+            <ObservationViewer
+              observation={pageObservation}
+              onRefresh={collectPage}
+              loading={observeLoading}
+            />
+          )}
+
+          {tab === 'history' && <TaskHistory onRerun={handleRerun} />}
+
+          {tab === 'settings' && (
+            <SettingsPanel
+              settings={extensionSettings}
+              onSettingsChange={setExtensionSettings}
+            />
+          )}
+        </div>
       </div>
 
       {state.pendingApproval && state.taskId && (
@@ -496,18 +505,51 @@ export default function App() {
       )}
 
       <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.38; } }
         @keyframes dotPulse {
           0%, 80%, 100% { opacity: 0.15; transform: scale(0.8); }
           40% { opacity: 1; transform: scale(1); }
         }
         * { box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 4px; }
+        button, input, textarea, select { font: inherit; }
+        ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #1e1e1e; border-radius: 0; }
+        ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 999px; }
       `}</style>
     </div>
+  )
+}
+
+function Banner({ tone, children }: { tone: 'danger' | 'warning'; children: ReactNode }) {
+  const palette =
+    tone === 'danger'
+      ? { bg: 'var(--danger-bg)', border: 'var(--danger-border)', color: 'var(--danger)' }
+      : { bg: 'var(--warning-bg)', border: 'var(--warning-border)', color: 'var(--warning)' }
+
+  return (
+    <div
+      style={{
+        background: palette.bg,
+        padding: '7px 14px',
+        fontSize: 11,
+        color: palette.color,
+        borderBottom: `1px solid ${palette.border}`,
+        flexShrink: 0,
+        lineHeight: 1.45,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function HamburgerIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <path d="M3 4.5h10" />
+      <path d="M3 8h10" />
+      <path d="M3 11.5h10" />
+    </svg>
   )
 }
 
@@ -517,6 +559,10 @@ function safeHostname(url: string) {
   } catch {
     return url
   }
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 function needsCurrentPageContext(prompt: string) {
@@ -538,4 +584,80 @@ function needsCurrentPageContext(prompt: string) {
     'write a review',
     'review this place',
   ].some((phrase) => normalized.includes(phrase))
+}
+
+const menuButtonStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 34,
+  height: 34,
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 12,
+  color: 'var(--text)',
+  cursor: 'pointer',
+}
+
+const secondaryButtonStyle: CSSProperties = {
+  alignSelf: 'flex-start',
+  background: 'var(--panel)',
+  border: '1px solid var(--border)',
+  borderRadius: 999,
+  color: 'var(--text)',
+  fontSize: 11,
+  padding: '8px 12px',
+  cursor: 'pointer',
+}
+
+const dangerButtonStyle: CSSProperties = {
+  background: 'transparent',
+  border: '1px solid var(--danger-border)',
+  borderRadius: 999,
+  color: 'var(--danger)',
+  fontSize: 11,
+  padding: '5px 10px',
+  cursor: 'pointer',
+}
+
+const darkThemeVars: CSSProperties = {
+  ['--bg' as string]: '#0b0d10',
+  ['--header-bg' as string]: 'rgba(11,13,16,0.94)',
+  ['--panel' as string]: '#111317',
+  ['--panel-soft' as string]: '#141920',
+  ['--surface' as string]: '#0f1216',
+  ['--border' as string]: '#1f252d',
+  ['--text' as string]: '#eef2f7',
+  ['--text-soft' as string]: '#cbd5e1',
+  ['--muted' as string]: '#7b8794',
+  ['--shadow' as string]: '0 18px 44px rgba(0,0,0,0.28)',
+  ['--shadow-soft' as string]: '0 10px 24px rgba(0,0,0,0.14)',
+  ['--scrollbar' as string]: '#1f242c',
+  ['--danger' as string]: '#f87171',
+  ['--danger-bg' as string]: '#140809',
+  ['--danger-border' as string]: '#3c191b',
+  ['--warning' as string]: '#fbbf24',
+  ['--warning-bg' as string]: '#171102',
+  ['--warning-border' as string]: '#3f3110',
+}
+
+const lightThemeVars: CSSProperties = {
+  ['--bg' as string]: '#f5f7fb',
+  ['--header-bg' as string]: 'rgba(245,247,251,0.94)',
+  ['--panel' as string]: '#ffffff',
+  ['--panel-soft' as string]: '#f3f6fb',
+  ['--surface' as string]: '#f8fafc',
+  ['--border' as string]: '#d8e0ea',
+  ['--text' as string]: '#0f172a',
+  ['--text-soft' as string]: '#334155',
+  ['--muted' as string]: '#64748b',
+  ['--shadow' as string]: '0 18px 44px rgba(15,23,42,0.10)',
+  ['--shadow-soft' as string]: '0 10px 24px rgba(15,23,42,0.06)',
+  ['--scrollbar' as string]: '#c9d4e1',
+  ['--danger' as string]: '#dc2626',
+  ['--danger-bg' as string]: '#fff1f2',
+  ['--danger-border' as string]: '#fecdd3',
+  ['--warning' as string]: '#b45309',
+  ['--warning-bg' as string]: '#fffbeb',
+  ['--warning-border' as string]: '#fde68a',
 }
