@@ -1,4 +1,11 @@
 import type { StreamState } from '../hooks/useTaskStream.js'
+import {
+  ActionIcon,
+  CameraIcon,
+  DocumentIcon,
+  SparkIcon,
+  TargetIcon,
+} from './icons.js'
 
 interface Props {
   state: StreamState
@@ -62,7 +69,22 @@ export function LiveTaskView({ state }: Props) {
 
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-            <AssistantGlyph color={meta.color} />
+            <div
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 12,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                color: meta.color,
+                flexShrink: 0,
+              }}
+            >
+              <SparkIcon />
+            </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, marginBottom: 3 }}>Browser Assistant</div>
               <div
@@ -312,7 +334,7 @@ export function LiveTaskView({ state }: Props) {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <DocumentIcon />
+            <DocumentIcon style={{ color: 'var(--muted)' }} />
             <span style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>Assistant response</span>
           </div>
           <div
@@ -431,21 +453,6 @@ function StatusDot({ color }: { color: string }) {
   return <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
 }
 
-function AssistantGlyph({ color }: { color: string }) {
-  return (
-    <div
-      style={{
-        width: 34,
-        height: 34,
-        borderRadius: '50%',
-        background: `radial-gradient(circle at 35% 35%, #e0f2fe, ${color} 58%, #0f172a)`,
-        boxShadow: `0 0 0 6px ${color}16`,
-        flexShrink: 0,
-      }}
-    />
-  )
-}
-
 function OrbitDots({ compact = false }: { compact?: boolean }) {
   return (
     <span style={{ display: 'inline-flex', gap: compact ? 3 : 4, alignItems: 'center' }}>
@@ -462,77 +469,5 @@ function OrbitDots({ compact = false }: { compact?: boolean }) {
         />
       ))}
     </span>
-  )
-}
-
-function ActionIcon({ type }: { type: string }) {
-  const common = {
-    width: 15,
-    height: 15,
-    viewBox: '0 0 16 16',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.6,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-  }
-
-  switch (type) {
-    case 'goto':
-      return <svg {...common}><path d="M2 8h10" /><path d="M8.5 4.5 12 8l-3.5 3.5" /></svg>
-    case 'click':
-      return <svg {...common}><path d="M4 2.5 12 8 8.2 9.1 6.6 13.5 4 2.5Z" /></svg>
-    case 'type':
-      return <svg {...common}><path d="M3 4.5h10" /><path d="M6.2 4.5v7" /><path d="M9.8 4.5v7" /><path d="M4.8 11.5h6.4" /></svg>
-    case 'select':
-      return <svg {...common}><rect x="2.5" y="3" width="11" height="9.5" rx="2" /><path d="m6 7 2 2 2-2" /></svg>
-    case 'scroll':
-      return <svg {...common}><path d="M8 2.5v11" /><path d="m5 5.5 3-3 3 3" /><path d="m5 10.5 3 3 3-3" /></svg>
-    case 'hover':
-      return <svg {...common}><path d="M6 2.5v5" /><path d="M8.5 4v3" /><path d="M11 5.5v1.5" /><path d="M4 8.5h8v1a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3Z" /></svg>
-    case 'press':
-    case 'pressKey':
-      return <svg {...common}><rect x="2" y="4" width="12" height="8" rx="2" /><path d="M5 8h6" /></svg>
-    case 'wait_for_selector':
-    case 'wait_for_text':
-      return <svg {...common}><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3l2 1.5" /></svg>
-    case 'extract':
-      return <svg {...common}><path d="M4 2.5h5l3 3v8H4z" /><path d="M9 2.5v3h3" /><path d="M5.5 9h5" /><path d="M5.5 11.5h3.5" /></svg>
-    case 'screenshot':
-      return <svg {...common}><rect x="2" y="4.5" width="12" height="8" rx="2" /><circle cx="8" cy="8.5" r="2.2" /><path d="M5.5 4.5 6.8 3h2.4l1.3 1.5" /></svg>
-    default:
-      return <svg {...common}><circle cx="8" cy="8" r="5.5" /><path d="M8 6v2" /><path d="M8 10.5h.01" /></svg>
-  }
-}
-
-function TargetIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="4.5" />
-      <path d="M8 1.5v2" />
-      <path d="M8 12.5v2" />
-      <path d="M1.5 8h2" />
-      <path d="M12.5 8h2" />
-    </svg>
-  )
-}
-
-function CameraIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M5 7h3l1.5-2h5L16 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
-      <circle cx="12" cy="13" r="3.5" />
-    </svg>
-  )
-}
-
-function DocumentIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--muted)' }}>
-      <path d="M4 2.5h5l3 3v8H4z" />
-      <path d="M9 2.5v3h3" />
-      <path d="M5.5 9h5" />
-      <path d="M5.5 11.5h3.5" />
-    </svg>
   )
 }

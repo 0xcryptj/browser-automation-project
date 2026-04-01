@@ -197,6 +197,17 @@ internal static class BrowserAutomationNativeHost
         var port = SafePort(runnerBaseUrl);
         var nodeExe = ResolveNodeExecutable();
         var runnerArgs = ResolveRunnerArguments();
+        Directory.CreateDirectory(RuntimeDirectory);
+        File.AppendAllText(
+            LogPath,
+            string.Format(
+                "[{0}] launching runner silently: {1} {2}{3}",
+                DateTime.Now.ToString("O"),
+                nodeExe,
+                runnerArgs,
+                Environment.NewLine
+            )
+        );
         var startInfo = new ProcessStartInfo
         {
             FileName = nodeExe,
@@ -205,39 +216,14 @@ internal static class BrowserAutomationNativeHost
             UseShellExecute = false,
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
         };
 
         startInfo.EnvironmentVariables["RUNNER_PORT"] = port;
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = false };
-        process.Start();
-
-        var logWriter = new StreamWriter(new FileStream(LogPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite));
-        process.OutputDataReceived += (sender, args) =>
+        if (!process.Start())
         {
-            if (args.Data != null)
-            {
-                lock (logWriter)
-                {
-                    logWriter.WriteLine(args.Data);
-                    logWriter.Flush();
-                }
-            }
-        };
-        process.ErrorDataReceived += (sender, args) =>
-        {
-            if (args.Data != null)
-            {
-                lock (logWriter)
-                {
-                    logWriter.WriteLine(args.Data);
-                    logWriter.Flush();
-                }
-            }
-        };
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
+            throw new InvalidOperationException("The local runner process could not be started.");
+        }
     }
 
     private static void StopBrowserProcesses(string browser)

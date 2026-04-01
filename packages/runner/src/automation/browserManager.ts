@@ -283,7 +283,7 @@ export async function ensureBrowserSession(
     throw new Error('Browser context was not available after initialization.')
   }
 
-  if (!interactive && (!canUsePage(activePage) || shouldSwapToPreferredPage(activePage, preferred))) {
+  if (!canUsePage(activePage) || (!interactive && shouldSwapToPreferredPage(activePage, preferred))) {
     await selectBestPage(preferred)
   }
 

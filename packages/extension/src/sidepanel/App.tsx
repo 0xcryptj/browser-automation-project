@@ -56,7 +56,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTabInfo | null>(null)
   const { state, submitTask, approve, cancel, reset, retryStream } = useTaskStream()
   const prevStatus = useRef(state.status)
-  const attemptedAutoStart = useRef(false)
+  const lastAutoStartAttemptAt = useRef(0)
   const isQuizMode = extensionSettings?.quizModeEnabled ?? false
   const isQuizCollapsed = isQuizMode && (extensionSettings?.quizModeCollapsed ?? false)
   const visibleNavItems = isQuizMode
@@ -163,22 +163,23 @@ export default function App() {
   }, [checkRunner])
 
   useEffect(() => {
-    if (attemptedAutoStart.current || extensionSettings === null) {
+    if (extensionSettings === null || !extensionSettings.autoStartRunner) {
       return
     }
 
-    if (!extensionSettings.autoStartRunner) {
-      attemptedAutoStart.current = true
+    if (runnerStatus !== 'disconnected' || runnerStarting) {
       return
     }
 
-    if (runnerStatus !== 'disconnected') {
-      return
-    }
+    const elapsed = Date.now() - lastAutoStartAttemptAt.current
+    const waitMs = Math.max(0, 8000 - elapsed)
+    const timeoutId = window.setTimeout(() => {
+      lastAutoStartAttemptAt.current = Date.now()
+      void ensureLocalRunner()
+    }, waitMs)
 
-    attemptedAutoStart.current = true
-    void ensureLocalRunner()
-  }, [ensureLocalRunner, extensionSettings, runnerStatus])
+    return () => window.clearTimeout(timeoutId)
+  }, [ensureLocalRunner, extensionSettings, runnerStarting, runnerStatus])
 
   useEffect(() => {
     const prev = prevStatus.current
@@ -217,23 +218,28 @@ export default function App() {
     }
   }, [isQuizMode, tab])
 
-  const collectPage = useCallback(async (mode: 'task' | 'observe' = 'observe'): Promise<PageObservation | null> => {
+  const collectPage = useCallback(async (
+    mode: 'task' | 'observe' = 'observe',
+    behavior?: { quietOnFailure?: boolean }
+  ): Promise<PageObservation | null> => {
     setObserveLoading(true)
     try {
-      const options: ObservationOptions = getDefaultObservationOptions(mode)
+      const observationOptions: ObservationOptions = getDefaultObservationOptions(mode)
       const observation = await new Promise<PageObservation | null>((resolve) => {
-        chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTEXT', options }, (response) => {
+        chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTEXT', options: observationOptions }, (response) => {
           if (
             chrome.runtime.lastError ||
             !response ||
             response.error ||
             typeof response.timestamp !== 'number'
           ) {
-            setPageAccessMessage(
-              chrome.runtime.lastError?.message ??
-                response?.error ??
-                'The assistant could not inspect this tab. Try a normal website instead of a browser-internal page.'
-            )
+            if (!behavior?.quietOnFailure) {
+              setPageAccessMessage(
+                chrome.runtime.lastError?.message ??
+                  response?.error ??
+                  'The assistant could not inspect this tab. Try a normal website instead of a browser-internal page.'
+              )
+            }
             resolve(null)
             return
           }
@@ -263,15 +269,16 @@ export default function App() {
 
       setTab('tasks')
       setMenuOpen(false)
+      const requiresContext = needsCurrentPageContext(prompt)
 
       let observation: PageObservation | null = null
       try {
-        observation = await collectPage('task')
+        observation = await collectPage('task', { quietOnFailure: !requiresContext })
       } catch {
         observation = null
       }
 
-      if (!observation && needsCurrentPageContext(prompt)) {
+      if (!observation && requiresContext) {
         setPageAccessMessage(
           'This task needs access to the current page, but the extension could not inspect this tab. Open a normal website tab and try again.'
         )
@@ -309,7 +316,17 @@ export default function App() {
     state.steps.length > 0
 
   const themeVars = resolvedTheme === 'light' ? lightThemeVars : darkThemeVars
-  const topBanner = pageAccessMessage
+  const showRunnerRecoveryCard = runnerStatus !== 'connected' || runnerStarting || Boolean(launcherError)
+  const topBanner = showRunnerRecoveryCard ? null : pageAccessMessage
+  const showTaskResult =
+    hasResult &&
+    !(
+      showRunnerRecoveryCard &&
+      (state.status === 'idle' ||
+        state.status === 'error' ||
+        state.status === 'submitting' ||
+        state.status === 'planning')
+    )
   const orbState =
     runnerStatus !== 'connected'
       ? 'offline'
@@ -577,9 +594,9 @@ export default function App() {
                   />
                 ) : (
                   <>
-                    {hasResult && <LiveTaskView state={state} />}
+                    {showTaskResult && <LiveTaskView state={state} />}
 
-                    {(runnerStatus !== 'connected' || runnerStarting || launcherError) && (
+                    {showRunnerRecoveryCard && (
                       <ConnectionCard
                         runnerUrl={runnerUrl}
                         runnerStarting={runnerStarting}
@@ -589,13 +606,13 @@ export default function App() {
                       />
                     )}
 
-                    {state.status === 'error' && state.taskId && (
+                    {!showRunnerRecoveryCard && state.status === 'error' && state.taskId && (
                       <button onClick={() => void retryStream()} style={secondaryButtonStyle}>
                         Retry stream
                       </button>
                     )}
 
-                    {state.status === 'error' && !state.taskId && state.prompt && (
+                    {!showRunnerRecoveryCard && state.status === 'error' && !state.taskId && state.prompt && (
                       <button onClick={() => void handleSubmit(state.prompt)} style={secondaryButtonStyle}>
                         Try again
                       </button>
@@ -795,7 +812,7 @@ function ConnectionCard({
                 Your local operator is offline
               </div>
               <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--muted)' }}>
-                The extension is set to use {runnerUrl}. Once the companion is installed, startup can happen automatically.
+                The extension is set to use {runnerUrl}. The local operator will start automatically when needed.
               </div>
             </>
           )}

@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { Action, ActionSensitivity } from '@browser-automation/shared'
+import { ShieldIcon } from './icons.js'
 
 interface Props {
   taskId: string
@@ -55,14 +56,19 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
             <div
               style={{
-                width: 12,
-                height: 12,
-                borderRadius: '50%',
-                background: cfg.color,
-                boxShadow: `0 0 0 6px ${cfg.color}18`,
+                width: 28,
+                height: 28,
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: `${cfg.color}14`,
+                color: cfg.color,
                 flexShrink: 0,
               }}
-            />
+            >
+              <ShieldIcon size={15} />
+            </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Approval required</div>
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-soft)', lineHeight: 1.5 }}>

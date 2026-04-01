@@ -25,6 +25,7 @@ function copyExtensionAssets() {
 
 export default defineConfig({
   base: './',
+  assetsInclude: ['**/*.PNG'],
   plugins: [react(), copyExtensionAssets()],
   build: {
     target: 'chrome112',

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ComposeIcon, SendIcon } from './icons.js'
 
 interface Props {
   onSubmit: (prompt: string) => void
@@ -57,7 +58,7 @@ export function TaskInput({ onSubmit, disabled, compact = false }: Props) {
             style={iconButtonStyle}
             title="Tools coming next"
           >
-            <PlusIcon />
+            <ComposeIcon size={14} />
           </button>
         )}
 
@@ -106,7 +107,7 @@ export function TaskInput({ onSubmit, disabled, compact = false }: Props) {
           }}
           title={disabled ? 'Task running' : 'Run task'}
         >
-          <SendIcon />
+          <SendIcon size={14} />
         </button>
       </div>
 
@@ -146,24 +147,6 @@ function Keycap({ label }: { label: string }) {
     <span style={keycapStyle}>
       {label}
     </span>
-  )
-}
-
-function SendIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2L7 9" />
-      <path d="M14 2L9.5 14 7 9 2 6.5 14 2Z" />
-    </svg>
-  )
-}
-
-function PlusIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-      <path d="M8 3v10" />
-      <path d="M3 8h10" />
-    </svg>
   )
 }
 
