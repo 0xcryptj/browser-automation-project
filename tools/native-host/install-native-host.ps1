@@ -31,7 +31,7 @@ function Get-CscPath {
 }
 
 $csc = Get-CscPath
-& $csc /nologo /target:exe /out:$hostExe /r:System.Web.Extensions.dll $hostSource
+& $csc /nologo /target:winexe /out:$hostExe /r:System.Web.Extensions.dll $hostSource
 
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $hostExe)) {
   throw 'Failed to build browser-automation-native-host.exe'

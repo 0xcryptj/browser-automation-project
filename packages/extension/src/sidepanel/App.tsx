@@ -18,6 +18,12 @@ import { runnerClient } from '../lib/runnerClient.js'
 type Tab = 'tasks' | 'assist' | 'observe' | 'history' | 'settings'
 type RunnerStatus = 'checking' | 'connected' | 'disconnected'
 type ResolvedTheme = 'dark' | 'light'
+type ActiveTabInfo = {
+  title: string
+  url: string
+  hostname: string
+  faviconUrl: string | null
+}
 
 const NAV_ITEMS: Array<{ id: Tab; label: string; description: string }> = [
   { id: 'tasks', label: 'Tasks', description: 'Run browser actions and ask follow-up questions.' },
@@ -27,14 +33,21 @@ const NAV_ITEMS: Array<{ id: Tab; label: string; description: string }> = [
   { id: 'settings', label: 'Settings', description: 'Runner, browser target, provider, and profile.' },
 ]
 
+const EXAMPLE_PROMPTS = [
+  'Draft a professional email reply',
+  'Create a study plan for this week',
+  'Create a project timeline from my notes',
+  'Summarize this page and tell me the next steps',
+  'Find the contact information on this site',
+  'Fill the visible form and pause before submitting',
+]
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('tasks')
   const [menuOpen, setMenuOpen] = useState(false)
   const [runnerStatus, setRunnerStatus] = useState<RunnerStatus>('checking')
   const [runnerUrl, setRunnerUrl] = useState('http://localhost:3000')
   const [runnerHealth, setRunnerHealth] = useState<Awaited<ReturnType<typeof runnerClient.health>> | null>(null)
-  const [runnerDetails, setRunnerDetails] = useState<string | null>(null)
-  const [runnerWarning, setRunnerWarning] = useState<string | null>(null)
   const [extensionSettings, setExtensionSettings] = useState<ExtensionSettings | null>(null)
   const [pageObservation, setPageObservation] = useState<PageObservation | null>(null)
   const [observeLoading, setObserveLoading] = useState(false)
@@ -43,6 +56,7 @@ export default function App() {
   const [runnerStarting, setRunnerStarting] = useState(false)
   const [launcherError, setLauncherError] = useState<string | null>(null)
   const [launcherHelperCommand, setLauncherHelperCommand] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<ActiveTabInfo | null>(null)
   const { state, submitTask, approve, cancel, reset, retryStream } = useTaskStream()
   const prevStatus = useRef(state.status)
   const attemptedAutoStart = useRef(false)
@@ -69,18 +83,11 @@ export default function App() {
       const health = await runnerClient.health()
       setRunnerHealth(health)
       setRunnerStatus(health.status === 'ok' ? 'connected' : 'disconnected')
-      const suppressFallbackWarning =
-        health.browserTarget?.mode === 'attach' &&
-        health.browserTarget.activeMode === 'launch'
-      setRunnerWarning(suppressFallbackWarning ? null : health.browserTarget?.warning ?? health.planner.warning ?? null)
       setLauncherError(null)
       setLauncherHelperCommand(null)
-      setRunnerDetails(formatRunnerDetails(health))
     } catch {
       setRunnerHealth(null)
       setRunnerStatus('disconnected')
-      setRunnerDetails(null)
-      setRunnerWarning(null)
     }
   }, [])
 
@@ -111,6 +118,43 @@ export default function App() {
     media.addEventListener('change', updateTheme)
 
     return () => media.removeEventListener('change', updateTheme)
+  }, [])
+
+  useEffect(() => {
+    const refreshActiveTab = async () => {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        const title = (tab?.title ?? '').trim()
+        const url = (tab?.url ?? '').trim()
+        setActiveTab({
+          title: title || 'Current page',
+          url,
+          hostname: safeHostname(url),
+          faviconUrl: tab?.favIconUrl ?? null,
+        })
+      } catch {
+        setActiveTab(null)
+      }
+    }
+
+    const handleActivated = () => {
+      void refreshActiveTab()
+    }
+
+    const handleUpdated = (_tabId: number, changeInfo: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => {
+      if (tab.active && (typeof changeInfo.title === 'string' || typeof changeInfo.url === 'string' || typeof changeInfo.favIconUrl === 'string' || changeInfo.status === 'complete')) {
+        void refreshActiveTab()
+      }
+    }
+
+    void refreshActiveTab()
+    chrome.tabs.onActivated.addListener(handleActivated)
+    chrome.tabs.onUpdated.addListener(handleUpdated)
+
+    return () => {
+      chrome.tabs.onActivated.removeListener(handleActivated)
+      chrome.tabs.onUpdated.removeListener(handleUpdated)
+    }
   }, [])
 
   useEffect(() => {
@@ -268,18 +312,13 @@ export default function App() {
     state.steps.length > 0
 
   const themeVars = resolvedTheme === 'light' ? lightThemeVars : darkThemeVars
-  const currentTabMeta = visibleNavItems.find((item) => item.id === tab) ?? visibleNavItems[0] ?? NAV_ITEMS[0]
-  const topBanner = runnerStatus === 'disconnected'
-    ? null
-    : runnerWarning ?? pageAccessMessage
+  const topBanner = pageAccessMessage
   const orbState =
     runnerStatus !== 'connected'
       ? 'offline'
       : runnerHealth?.browserTarget?.mode === 'attach' && runnerHealth.browserTarget.activeMode === 'attach'
         ? 'attached'
         : runnerHealth?.browserTarget?.mode === 'attach' && runnerHealth.browserTarget.activeMode === 'launch'
-          ? 'warning'
-          : runnerWarning
           ? 'warning'
           : 'online'
 
@@ -299,19 +338,6 @@ export default function App() {
     >
       <div
         style={{
-          position: 'absolute',
-          inset: 0,
-          overflow: 'hidden',
-          pointerEvents: 'none',
-        }}
-      >
-        <div style={auroraStyle('radial-gradient(circle at 30% 20%, rgba(88,132,255,0.24), rgba(88,132,255,0.02) 55%, transparent 72%)', -44, -30, 180, 180)} />
-        <div style={auroraStyle('radial-gradient(circle at 70% 10%, rgba(110,231,255,0.14), rgba(110,231,255,0.02) 50%, transparent 70%)', 170, -24, 170, 170)} />
-        <div style={auroraStyle('radial-gradient(circle at 50% 50%, rgba(255,255,255,0.08), rgba(255,255,255,0.01) 55%, transparent 72%)', 60, 330, 220, 220)} />
-      </div>
-
-      <div
-        style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -326,19 +352,35 @@ export default function App() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <div
-            style={{
-              width: 14,
-              height: 14,
-              borderRadius: '50%',
-              ...getOrbStyle(orbState),
-              flexShrink: 0,
-            }}
-          />
+          {activeTab?.faviconUrl ? (
+            <img
+              src={activeTab.faviconUrl}
+              alt=""
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: 4,
+                flexShrink: 0,
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: 4,
+                background: 'var(--panel-soft)',
+                border: '1px solid var(--glass-border)',
+                flexShrink: 0,
+              }}
+            />
+          )}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em' }}>Browser Operator</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {activeTab?.title || 'Browser Operator'}
+            </div>
             <div style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {`${currentTabMeta.label} - ${currentTabMeta.description}`}
+              {activeTab?.hostname || 'Ready'}
             </div>
           </div>
         </div>
@@ -385,47 +427,6 @@ export default function App() {
         </div>
       </div>
 
-      {runnerStatus === 'connected' && runnerDetails && !isQuizCollapsed && (
-        <div style={{ padding: '8px 14px 0', flexShrink: 0 }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '7px 10px',
-              borderRadius: 999,
-              background: 'var(--glass-button)',
-              border: '1px solid var(--glass-border)',
-              backdropFilter: 'blur(16px) saturate(1.18)',
-              boxShadow: 'var(--glass-shadow-soft)',
-              fontSize: 11,
-              color: 'var(--muted)',
-            }}
-          >
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background:
-                  orbState === 'attached'
-                    ? '#34d399'
-                    : orbState === 'warning'
-                      ? '#fbbf24'
-                      : '#60a5fa',
-                boxShadow:
-                  orbState === 'attached'
-                    ? '0 0 0 4px rgba(52,211,153,0.12)'
-                    : orbState === 'warning'
-                      ? '0 0 0 4px rgba(251,191,36,0.12)'
-                      : '0 0 0 4px rgba(96,165,250,0.12)',
-              }}
-            />
-            {runnerDetails}
-          </div>
-        </div>
-      )}
-
       {topBanner && !isQuizCollapsed && (
         <Banner tone={runnerStatus === 'disconnected' ? 'danger' : 'warning'}>
           {topBanner}
@@ -470,7 +471,7 @@ export default function App() {
               <div style={{ padding: 14, borderBottom: '1px solid var(--border)' }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Menu</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                  {`Theme: ${extensionSettings?.theme ?? 'system'} - Browser: ${runnerDetails ?? 'checking...'}`}
+                  {`${activeTab?.title || 'Current page'} · ${runnerStatus === 'connected' ? 'Connected' : runnerStatus === 'disconnected' ? 'Offline' : 'Checking'}`}
                 </div>
               </div>
 
@@ -620,39 +621,24 @@ export default function App() {
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
-                            gap: 12,
+                            gap: 10,
                             textAlign: 'center',
-                            maxWidth: 320,
+                            maxWidth: 340,
                           }}
                         >
-                          <div
-                            style={{
-                              width: 64,
-                              height: 64,
-                              borderRadius: '50%',
-                              background: 'radial-gradient(circle at 35% 35%, rgba(255,255,255,0.9), rgba(115,168,255,0.84) 38%, rgba(32,77,187,0.78) 66%, rgba(7,18,41,0.82))',
-                              boxShadow: '0 0 0 14px rgba(116,173,255,0.10), 0 18px 40px rgba(24,72,191,0.18)',
-                            }}
-                          />
                           <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.03em' }}>
                             {isQuizMode ? 'Quiz mode' : 'Ask anything'}
                           </div>
                           <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--muted)' }}>
                             {isQuizMode
                               ? 'Keep the panel discreet while you practice. Ask for hints, quick explanations, or short page summaries.'
-                              : 'Read the page, click through flows, fill visible forms, or ask for a summary while the operator works in your browser.'}
+                              : 'Use it like a strong everyday assistant, or have it handle grounded browser tasks on the page you are on.'}
                           </div>
                         </div>
 
                         {!isQuizMode && (
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-                            {[
-                            'Go to example.com',
-                            'Extract the main heading',
-                            'Tell me what I am viewing',
-                            'Search for TypeScript on google.com',
-                            'Take a screenshot of this page',
-                          ].map((examplePrompt) => (
+                            {EXAMPLE_PROMPTS.map((examplePrompt) => (
                             <button
                               key={examplePrompt}
                               onClick={() => void handleSubmit(examplePrompt)}
@@ -793,16 +779,6 @@ function ConnectionCard({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle at 35% 35%, #bfdbfe, #2563eb 58%, #0f172a)',
-            boxShadow: '0 0 0 8px rgba(37,99,235,0.08)',
-            flexShrink: 0,
-          }}
-        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
             {runnerStarting ? 'Starting your local operator' : 'Your local operator is offline'}
@@ -1138,57 +1114,10 @@ const lightThemeVars: CSSProperties = {
   ['--warning-border' as string]: '#fde68a',
 }
 
-function auroraStyle(background: string, left: number, top: number, width: number, height: number): CSSProperties {
-  return {
-    position: 'absolute',
-    left,
-    top,
-    width,
-    height,
-    borderRadius: '50%',
-    background,
-    filter: 'blur(28px)',
-    opacity: 0.9,
-  }
-}
-
-function getOrbStyle(state: 'offline' | 'warning' | 'online' | 'attached'): CSSProperties {
-  if (state === 'attached') {
-    return {
-      background: 'radial-gradient(circle at 35% 35%, #d1fae5, #34d399 58%, #064e3b)',
-      boxShadow: '0 0 0 6px rgba(52,211,153,0.12), 0 10px 24px rgba(16,185,129,0.18)',
-    }
-  }
-
-  if (state === 'warning') {
-    return {
-      background: 'radial-gradient(circle at 35% 35%, #fef3c7, #f59e0b 58%, #78350f)',
-      boxShadow: '0 0 0 6px rgba(245,158,11,0.12), 0 10px 24px rgba(245,158,11,0.18)',
-    }
-  }
-
-  if (state === 'offline') {
-    return {
-      background: 'radial-gradient(circle at 35% 35%, #fecaca, #f87171 58%, #7f1d1d)',
-      boxShadow: '0 0 0 6px rgba(248,113,113,0.10), 0 10px 24px rgba(127,29,29,0.16)',
-    }
-  }
-
-  return {
-    background: 'radial-gradient(circle at 35% 35%, #bfdbfe, #2563eb 62%, #0f172a)',
-    boxShadow: '0 0 0 6px rgba(37,99,235,0.10), 0 10px 24px rgba(37,99,235,0.16)',
-  }
-}
-
 function formatRunnerDetails(health: Awaited<ReturnType<typeof runnerClient.health>>) {
-  const browserState =
-    health.browserTarget?.mode === 'attach'
-      ? health.browserTarget.activeMode === 'attach'
-        ? 'Attached browser ready'
-        : 'Attach unavailable - using isolated browser'
-      : 'Launching isolated browser'
-  const base = `${health.planner.provider}/${health.planner.model ?? 'default'} - ${browserState}`
-  return health.browser?.browserConnected && health.browser.activePageUrl
-    ? `${base} on ${safeHostname(health.browser.activePageUrl)}`
-    : base
+  if (health.status !== 'ok') {
+    return 'Offline'
+  }
+
+  return 'Connected'
 }
