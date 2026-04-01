@@ -331,9 +331,10 @@ export function SettingsPanel({
 
           {browserSettings && (
             <InfoPanel>
-              <div>Mode: {browserSettings.mode}</div>
+              <div>Requested Mode: {browserSettings.mode}</div>
+              <div>Active Mode: {browserSettings.activeMode}</div>
               {browserSettings.cdpUrl && <div>CDP URL: {browserSettings.cdpUrl}</div>}
-              <div>Ready: {browserSettings.ready ? 'Yes' : 'No'}</div>
+              <div>Attach Ready: {browserSettings.attachReady ? 'Yes' : 'No'}</div>
               {browserSettings.warning && <div style={{ color: 'var(--warning)' }}>{browserSettings.warning}</div>}
             </InfoPanel>
           )}

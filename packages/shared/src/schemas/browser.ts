@@ -18,9 +18,11 @@ export type BrowserConnectionConfigStored = z.infer<typeof BrowserConnectionConf
 
 export const BrowserConnectionConfigPublic = z.object({
   mode: BrowserConnectionMode.default('launch'),
+  activeMode: BrowserConnectionMode.default('launch'),
   cdpUrl: z.string().optional(),
   source: z.enum(['default', 'env', 'local']).default('default'),
   ready: z.boolean().default(false),
+  attachReady: z.boolean().default(false),
   warning: z.string().optional(),
 })
 export type BrowserConnectionConfigPublic = z.infer<typeof BrowserConnectionConfigPublic>

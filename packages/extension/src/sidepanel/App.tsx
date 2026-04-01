@@ -69,7 +69,10 @@ export default function App() {
       const health = await runnerClient.health()
       setRunnerHealth(health)
       setRunnerStatus(health.status === 'ok' ? 'connected' : 'disconnected')
-      setRunnerWarning(health.browserTarget?.warning ?? health.planner.warning ?? null)
+      const suppressFallbackWarning =
+        health.browserTarget?.mode === 'attach' &&
+        health.browserTarget.activeMode === 'launch'
+      setRunnerWarning(suppressFallbackWarning ? null : health.browserTarget?.warning ?? health.planner.warning ?? null)
       setLauncherError(null)
       setLauncherHelperCommand(null)
       setRunnerDetails(formatRunnerDetails(health))
@@ -214,24 +217,7 @@ export default function App() {
       }
 
       if (runnerHealth?.browserTarget?.mode === 'attach' && !runnerHealth.browserTarget.ready) {
-        setRunnerStarting(true)
-        const recovered = await runnerClient.ensureBrowserAttach(
-          'brave',
-          runnerHealth.browserTarget.cdpUrl
-        )
-        await checkRunner()
-        setRunnerStarting(false)
-
-        if (!recovered.ok) {
-          setLauncherError(
-            recovered.error ??
-              runnerHealth.browserTarget.warning ??
-              'Attach mode is enabled, but the native browser is not reachable yet.'
-          )
-          setTab('settings')
-          setMenuOpen(false)
-          return
-        }
+        setLauncherError(null)
       }
 
       setTab('tasks')
@@ -289,9 +275,11 @@ export default function App() {
   const orbState =
     runnerStatus !== 'connected'
       ? 'offline'
-      : runnerHealth?.browserTarget?.mode === 'attach' && runnerHealth.browserTarget.ready
+      : runnerHealth?.browserTarget?.mode === 'attach' && runnerHealth.browserTarget.activeMode === 'attach'
         ? 'attached'
-        : runnerWarning
+        : runnerHealth?.browserTarget?.mode === 'attach' && runnerHealth.browserTarget.activeMode === 'launch'
+          ? 'warning'
+          : runnerWarning
           ? 'warning'
           : 'online'
 
@@ -1195,9 +1183,9 @@ function getOrbStyle(state: 'offline' | 'warning' | 'online' | 'attached'): CSSP
 function formatRunnerDetails(health: Awaited<ReturnType<typeof runnerClient.health>>) {
   const browserState =
     health.browserTarget?.mode === 'attach'
-      ? health.browserTarget.ready
+      ? health.browserTarget.activeMode === 'attach'
         ? 'Attached browser ready'
-        : 'Attach waiting'
+        : 'Attach unavailable - using isolated browser'
       : 'Launching isolated browser'
   const base = `${health.planner.provider}/${health.planner.model ?? 'default'} - ${browserState}`
   return health.browser?.browserConnected && health.browser.activePageUrl

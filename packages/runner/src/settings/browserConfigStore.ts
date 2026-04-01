@@ -10,9 +10,11 @@ import { config } from '../config.js'
 
 type ResolvedBrowserConfig = {
   mode: 'launch' | 'attach'
+  requestedMode: 'launch' | 'attach'
   cdpUrl?: string
   source: 'default' | 'env' | 'local'
   ready: boolean
+  attachReady: boolean
   warning?: string
 }
 
@@ -53,25 +55,51 @@ export async function getResolvedBrowserConfig(): Promise<ResolvedBrowserConfig>
 
   if (mode === 'attach') {
     const probe = await probeCdp(cdpUrl)
+    if (!probe.ready) {
+      return {
+        mode: 'launch',
+        requestedMode: 'attach',
+        cdpUrl,
+        source,
+        ready: true,
+        attachReady: false,
+        warning:
+          probe.warning ??
+          `Attach mode is unavailable at ${cdpUrl}. Falling back to the isolated automation browser for now.`,
+      }
+    }
+
     return {
-      mode,
+      mode: 'attach',
+      requestedMode: 'attach',
       cdpUrl,
       source,
-      ready: probe.ready,
+      ready: true,
+      attachReady: true,
       warning: probe.warning,
     }
   }
 
   return {
     mode: 'launch',
+    requestedMode: 'launch',
     source,
     ready: true,
+    attachReady: false,
   }
 }
 
 export async function getPublicBrowserConfig() {
   const resolved = await getResolvedBrowserConfig()
-  return BrowserConnectionConfigPublic.parse(resolved)
+  return BrowserConnectionConfigPublic.parse({
+    mode: resolved.requestedMode,
+    activeMode: resolved.mode,
+    cdpUrl: resolved.cdpUrl,
+    source: resolved.source,
+    ready: resolved.attachReady,
+    attachReady: resolved.attachReady,
+    warning: resolved.warning,
+  })
 }
 
 export function getBrowserConfigPath() {
@@ -108,7 +136,7 @@ async function probeCdp(cdpUrl: string) {
 
     return {
       ready: false,
-      warning: `Attach mode is not reachable at ${cdpUrl}. Fully close Brave or Chrome, relaunch it with --remote-debugging-port=9222, then refresh browser status. (${message})`,
+      warning: `Attach mode is not reachable at ${cdpUrl}. Tasks can fall back to the isolated browser, or you can relaunch Brave/Chrome with --remote-debugging-port=9222 to attach natively. (${message})`,
     }
   } finally {
     clearTimeout(timeout)
