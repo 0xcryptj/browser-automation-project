@@ -47,7 +47,7 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
   const interactive = hasInteractiveSteps(plan)
   const { page, isolatedWorkspace } = await ensureBrowserSession(workingContext, {
     interactive,
-    preferVisible: !interactive,
+    preferVisible: interactive,
   })
   const updatedSteps: ActionStep[] = plan.steps.map((s) => ({ ...s }))
 
@@ -63,6 +63,10 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
 
     const step = updatedSteps[i]
     if (step.status !== 'pending') continue
+
+    if (interactive) {
+      await page.bringToFront().catch(() => {})
+    }
 
     // Mid-execution approval gate
     if (step.action.requiresApproval) {

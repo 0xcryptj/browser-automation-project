@@ -174,12 +174,85 @@ function logPlannerRaw(plannerName: string, raw: string) {
 }
 
 function normalizeActionPlan(plan: ActionPlan, request: TaskRequest): ActionPlan {
+  const sanitizedPlan = sanitizeApprovalNoise(plan)
+
   if (!shouldUseGroundedReadPlan(request)) {
-    return plan
+    return sanitizedPlan
   }
 
   const groundedPlan = buildGroundedReadPlan(request)
-  return groundedPlan ?? plan
+  return groundedPlan ? sanitizeApprovalNoise(groundedPlan) : sanitizedPlan
+}
+
+function sanitizeApprovalNoise(plan: ActionPlan): ActionPlan {
+  return {
+    ...plan,
+    steps: plan.steps.map((step) => ({
+      ...step,
+      action: shouldAutoClearApproval(step.action)
+        ? {
+            ...step.action,
+            requiresApproval: false,
+            sensitivity: 'none',
+            approvalReason: undefined,
+          }
+        : step.action,
+    })),
+  }
+}
+
+function shouldAutoClearApproval(action: ActionPlan['steps'][number]['action']) {
+  if (!action.requiresApproval) return false
+
+  const haystack = [action.description, action.selector, action.elementRef, action.value, action.url]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  if (!haystack) {
+    return false
+  }
+
+  const benignPatterns = [
+    'search',
+    'query',
+    'filter',
+    'sort',
+    'next page',
+    'previous page',
+    'pagination',
+    'open result',
+    'open link',
+    'navigate',
+    'go to',
+    'expand',
+    'show more',
+    'load more',
+  ]
+
+  const irreversiblePatterns = [
+    'submit application',
+    'submit order',
+    'place order',
+    'confirm purchase',
+    'checkout',
+    'pay',
+    'payment',
+    'buy',
+    'purchase',
+    'send',
+    'email',
+    'post review',
+    'publish',
+    'delete',
+    'remove',
+  ]
+
+  if (irreversiblePatterns.some((pattern) => haystack.includes(pattern))) {
+    return false
+  }
+
+  return benignPatterns.some((pattern) => haystack.includes(pattern))
 }
 
 function shouldUseGroundedReadPlan(request: TaskRequest) {
