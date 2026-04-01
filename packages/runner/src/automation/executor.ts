@@ -246,7 +246,7 @@ async function bootstrapAutomationWorkspace(
 
   console.info(`[task:${taskId}] opening isolated automation workspace at ${targetUrl}`)
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 })
-  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {})
+  await page.waitForTimeout(250)
   return refreshTaskContext(page, current, taskId, 'bootstrap_workspace')
 }
 

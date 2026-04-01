@@ -52,6 +52,7 @@ Do NOT require approval for benign navigation or search actions such as:
 - For form filling, use observed labels, names, placeholders, and refs from the compact snapshot. Prefer elementRef over selector when possible.
 - When a stable ref exists for a target button, link, input, textarea, select, heading, or main content region, include elementRef.
 - Keep plans short and executable. Do not add unnecessary screenshots or waits when the task does not need them.
+- For search tasks on YouTube, Google, or similar sites, stop at the search results page unless the user explicitly asked to open, play, watch, or click a result.
 - Only require approval for clicks/presses/submits that would post, publish, send, confirm, buy, pay, delete, or otherwise make an irreversible change.
 - Never navigate to chrome:// pages or extension pages unless the user explicitly asked for that destination.
 

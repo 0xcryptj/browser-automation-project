@@ -17,7 +17,7 @@ export const actionHandlers: Record<string, ActionHandler> = {
   goto: async (page, action) => {
     if (!action.url) return fail('goto requires a url')
     await page.goto(action.url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
-    await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {})
+    await page.waitForTimeout(250)
     return ok(`Navigated to ${action.url}`)
   },
 

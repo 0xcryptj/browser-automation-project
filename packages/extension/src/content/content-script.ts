@@ -39,44 +39,61 @@ function getOverlayRoot() {
         :host { all: initial; }
         .frame {
           position: fixed;
-          inset: 8px;
-          border-radius: 22px;
-          border: 2px solid rgba(96, 165, 250, 0.4);
+          inset: 4px;
+          border-radius: 18px;
+          border: 3px solid rgba(96, 165, 250, 0.82);
           box-shadow:
-            inset 0 0 0 1px rgba(191, 219, 254, 0.18),
-            0 0 0 1px rgba(59,130,246,0.08),
-            0 0 46px rgba(59,130,246,0.16);
-          background: linear-gradient(180deg, rgba(96,165,250,0.03), rgba(59,130,246,0.01));
-          animation: frame-breathe 1.8s ease-in-out infinite;
+            inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+            0 0 0 1px rgba(59,130,246,0.14),
+            0 0 26px rgba(59,130,246,0.28),
+            0 0 80px rgba(59,130,246,0.14);
+          background: transparent;
+          animation: frame-breathe 1.5s ease-in-out infinite;
         }
         .frame.approval {
-          border-color: rgba(168, 85, 247, 0.42);
+          border-color: rgba(168, 85, 247, 0.84);
           box-shadow:
-            inset 0 0 0 1px rgba(216, 180, 254, 0.18),
-            0 0 0 1px rgba(168,85,247,0.08),
-            0 0 52px rgba(168,85,247,0.18);
-          background: linear-gradient(180deg, rgba(168,85,247,0.04), rgba(76,29,149,0.01));
+            inset 0 0 0 1px rgba(255,255,255,0.22),
+            0 0 0 1px rgba(168,85,247,0.14),
+            0 0 30px rgba(168,85,247,0.30),
+            0 0 80px rgba(168,85,247,0.12);
         }
         .frame.hidden { opacity: 0; }
+        .frame-bar {
+          position: fixed;
+          left: 50%;
+          top: 8px;
+          transform: translateX(-50%);
+          width: min(420px, calc(100vw - 28px));
+          height: 6px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, rgba(96,165,250,0.22), rgba(96,165,250,0.95), rgba(96,165,250,0.22));
+          box-shadow: 0 0 24px rgba(59,130,246,0.40);
+          animation: bar-pulse 1.2s ease-in-out infinite;
+        }
+        .frame-bar.approval {
+          background: linear-gradient(90deg, rgba(168,85,247,0.22), rgba(168,85,247,0.95), rgba(168,85,247,0.22));
+          box-shadow: 0 0 24px rgba(168,85,247,0.40);
+        }
+        .frame-bar.hidden { opacity: 0; }
         .ring {
           position: fixed;
-          border-radius: 18px;
-          border: 2px solid rgba(96, 165, 250, 0.95);
-          box-shadow: 0 0 0 1px rgba(191, 219, 254, 0.22), 0 0 26px rgba(59, 130, 246, 0.35);
-          background: linear-gradient(180deg, rgba(96,165,250,0.08), rgba(59,130,246,0.02));
+          border-radius: 16px;
+          border: 3px solid rgba(96, 165, 250, 0.95);
+          box-shadow: 0 0 0 1px rgba(191, 219, 254, 0.30), 0 0 32px rgba(59, 130, 246, 0.42);
+          background: transparent;
           transition: transform 120ms ease, opacity 120ms ease, width 120ms ease, height 120ms ease;
-          animation: pulse-ring 1.4s ease-in-out infinite;
+          animation: pulse-ring 1.1s ease-in-out infinite;
         }
         .ring.approval {
           border-color: rgba(168, 85, 247, 0.95);
-          box-shadow: 0 0 0 1px rgba(216, 180, 254, 0.24), 0 0 28px rgba(168, 85, 247, 0.38);
-          background: linear-gradient(180deg, rgba(168,85,247,0.10), rgba(76,29,149,0.03));
+          box-shadow: 0 0 0 1px rgba(216, 180, 254, 0.24), 0 0 32px rgba(168, 85, 247, 0.42);
         }
         .ring.hidden { opacity: 0; transform: scale(0.98); }
         .badge {
           position: fixed;
-          min-width: 240px;
-          max-width: min(460px, calc(100vw - 24px));
+          min-width: 280px;
+          max-width: min(520px, calc(100vw - 24px));
           border-radius: 18px;
           padding: 12px 13px;
           background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.92));
@@ -170,8 +187,12 @@ function getOverlayRoot() {
           50% { transform: scale(1.02); opacity: 0.72; }
         }
         @keyframes frame-breathe {
-          0%, 100% { opacity: 0.72; }
+          0%, 100% { opacity: 0.62; }
           50% { opacity: 1; }
+        }
+        @keyframes bar-pulse {
+          0%, 100% { opacity: 0.75; transform: translateX(-50%) scaleX(0.98); }
+          50% { opacity: 1; transform: translateX(-50%) scaleX(1.01); }
         }
         @keyframes cursor-ping {
           0% { transform: scale(0.8); opacity: 0.8; }
@@ -179,6 +200,7 @@ function getOverlayRoot() {
         }
       </style>
       <div class="frame hidden"></div>
+      <div class="frame-bar hidden"></div>
       <div class="ring hidden"></div>
       <div class="cursor hidden"></div>
     <div class="badge" hidden>
@@ -198,6 +220,7 @@ function getOverlayRoot() {
     host,
     shadow: host.shadowRoot!,
     frame: host.shadowRoot!.querySelector('.frame') as HTMLDivElement,
+    frameBar: host.shadowRoot!.querySelector('.frame-bar') as HTMLDivElement,
     ring: host.shadowRoot!.querySelector('.ring') as HTMLDivElement,
     cursor: host.shadowRoot!.querySelector('.cursor') as HTMLDivElement,
     badge: host.shadowRoot!.querySelector('.badge') as HTMLDivElement,
@@ -262,23 +285,26 @@ function clearOverlay() {
     overlayFrame = null
   }
 
-  const { frame, ring, cursor, badge } = getOverlayRoot()
+  const { frame, frameBar, ring, cursor, badge } = getOverlayRoot()
   frame.classList.add('hidden')
+  frameBar.classList.add('hidden')
   ring.classList.add('hidden')
   cursor.classList.add('hidden')
   badge.hidden = true
 }
 
 function renderOverlay(payload: OverlayPayload) {
-  const { frame, ring, cursor, badge, stop, title, subtitle } = getOverlayRoot()
+  const { frame, frameBar, ring, cursor, badge, stop, title, subtitle } = getOverlayRoot()
   const target = resolveOverlayTarget(payload)
   const approval = payload.status === 'awaiting_approval'
 
   frame.classList.toggle('approval', approval)
+  frameBar.classList.toggle('approval', approval)
   ring.classList.toggle('approval', approval)
   cursor.classList.toggle('approval', approval)
   badge.classList.toggle('approval', approval)
   frame.classList.remove('hidden')
+  frameBar.classList.remove('hidden')
 
   title.textContent = payload.description ?? describeAction(payload.actionType)
   subtitle.textContent = payload.targetLabel
@@ -308,18 +334,18 @@ function renderOverlay(payload: OverlayPayload) {
     cursor.style.top = `${Math.min(Math.max(cursorY, 16), window.innerHeight - 16)}px`
     cursor.classList.remove('hidden')
 
-    const badgeTop = rect.top > 92 ? rect.top - 78 : rect.bottom + 12
-    const badgeLeft = Math.min(Math.max(rect.left, 8), window.innerWidth - 320)
-    badge.style.left = `${badgeLeft}px`
-    badge.style.top = `${Math.max(badgeTop, 8)}px`
+    badge.style.left = '50%'
+    badge.style.top = '20px'
+    badge.style.transform = 'translateX(-50%)'
     badge.hidden = false
   } else {
     ring.classList.add('hidden')
     cursor.style.left = `${Math.min(window.innerWidth - 28, 72)}px`
     cursor.style.top = '72px'
     cursor.classList.remove('hidden')
-    badge.style.left = '12px'
-    badge.style.top = '12px'
+    badge.style.left = '50%'
+    badge.style.top = '20px'
+    badge.style.transform = 'translateX(-50%)'
     badge.hidden = false
   }
 }

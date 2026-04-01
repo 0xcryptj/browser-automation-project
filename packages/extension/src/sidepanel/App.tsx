@@ -214,13 +214,24 @@ export default function App() {
       }
 
       if (runnerHealth?.browserTarget?.mode === 'attach' && !runnerHealth.browserTarget.ready) {
-        setLauncherError(
-          runnerHealth.browserTarget.warning ??
-            'Attach mode is enabled, but the native browser is not reachable yet.'
+        setRunnerStarting(true)
+        const recovered = await runnerClient.ensureBrowserAttach(
+          'brave',
+          runnerHealth.browserTarget.cdpUrl
         )
-        setTab('settings')
-        setMenuOpen(false)
-        return
+        await checkRunner()
+        setRunnerStarting(false)
+
+        if (!recovered.ok) {
+          setLauncherError(
+            recovered.error ??
+              runnerHealth.browserTarget.warning ??
+              'Attach mode is enabled, but the native browser is not reachable yet.'
+          )
+          setTab('settings')
+          setMenuOpen(false)
+          return
+        }
       }
 
       setTab('tasks')
