@@ -15,6 +15,12 @@ $manifestPath = Join-Path $manifestDir 'com.browser_automation.host.json'
 
 New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
 
+& pnpm.cmd --filter @browser-automation/runner build
+
+if ($LASTEXITCODE -ne 0) {
+  throw 'Failed to build the runner runtime bundle.'
+}
+
 function Get-CscPath {
   $candidates = @(
     'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe',

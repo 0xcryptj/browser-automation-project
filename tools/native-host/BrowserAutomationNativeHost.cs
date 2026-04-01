@@ -196,12 +196,11 @@ internal static class BrowserAutomationNativeHost
     {
         var port = SafePort(runnerBaseUrl);
         var nodeExe = ResolveNodeExecutable();
-        var tsxCli = ResolveTsxCli();
-        var runnerEntry = Path.Combine(RepoRoot, "packages", "runner", "src", "index.ts");
+        var runnerArgs = ResolveRunnerArguments();
         var startInfo = new ProcessStartInfo
         {
             FileName = nodeExe,
-            Arguments = string.Format("\"{0}\" \"{1}\"", tsxCli, runnerEntry),
+            Arguments = runnerArgs,
             WorkingDirectory = RepoRoot,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -323,6 +322,24 @@ internal static class BrowserAutomationNativeHost
         throw new InvalidOperationException("Could not find node.exe for silent runner startup.");
     }
 
+    private static string ResolveRunnerArguments()
+    {
+        var compiledEntry = Path.Combine(RepoRoot, "packages", "runner", "dist", "index.js");
+        if (File.Exists(compiledEntry))
+        {
+            return string.Format("\"{0}\"", compiledEntry);
+        }
+
+        var sourceEntry = Path.Combine(RepoRoot, "packages", "runner", "src", "index.ts");
+        if (File.Exists(sourceEntry))
+        {
+            var tsxCli = ResolveTsxCli();
+            return string.Format("\"{0}\" \"{1}\"", tsxCli, sourceEntry);
+        }
+
+        throw new InvalidOperationException("Could not find a compiled runner entry point for silent startup.");
+    }
+
     private static string ResolveTsxCli()
     {
         var candidates = new[]
@@ -339,7 +356,7 @@ internal static class BrowserAutomationNativeHost
             }
         }
 
-        throw new InvalidOperationException("Could not find tsx cli.mjs for silent runner startup.");
+        throw new InvalidOperationException("Could not find tsx cli.mjs for silent runner startup fallback.");
     }
 
     private static Dictionary<string, object> WaitForJson(string url, int timeoutMs)

@@ -35,11 +35,8 @@ const NAV_ITEMS: Array<{ id: Tab; label: string; description: string }> = [
 
 const EXAMPLE_PROMPTS = [
   'Draft a professional email reply',
-  'Create a study plan for this week',
   'Create a project timeline from my notes',
   'Summarize this page and tell me the next steps',
-  'Find the contact information on this site',
-  'Fill the visible form and pause before submitting',
 ]
 
 export default function App() {
@@ -680,7 +677,7 @@ export default function App() {
               >
                 <TaskInput
                   onSubmit={handleSubmit}
-                  disabled={isRunning || runnerStatus !== 'connected'}
+                  disabled={runnerStarting || isRunning || runnerStatus !== 'connected'}
                   compact={isQuizCollapsed}
                 />
               </div>
@@ -780,14 +777,28 @@ function ConnectionCard({
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-            {runnerStarting ? 'Starting your local operator' : 'Your local operator is offline'}
-          </div>
-          <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--muted)' }}>
-            {runnerStarting
-              ? `Launching the local runner at ${runnerUrl}.`
-              : `The extension is set to use ${runnerUrl}. Once the companion is installed, startup can happen automatically.`}
-          </div>
+          {runnerStarting ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <LoadingPulse />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
+                  Starting local operator
+                </div>
+                <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--muted)' }}>
+                  Connecting to {runnerUrl}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+                Your local operator is offline
+              </div>
+              <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--muted)' }}>
+                The extension is set to use {runnerUrl}. Once the companion is installed, startup can happen automatically.
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -924,6 +935,26 @@ function CompactQuizView({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function LoadingPulse() {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+      {[0, 1, 2].map((index) => (
+        <span
+          key={index}
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            background: '#60a5fa',
+            opacity: 0.35,
+            animation: `dotPulse 1.1s ease-in-out ${index * 0.12}s infinite`,
+          }}
+        />
+      ))}
     </div>
   )
 }

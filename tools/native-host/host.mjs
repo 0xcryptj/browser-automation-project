@@ -102,12 +102,11 @@ function launchRunner(runnerBaseUrl) {
   const outFd = openSync(logPath, 'a')
   const errFd = openSync(logPath, 'a')
   const nodeExe = resolveNodeExecutable()
-  const tsxCli = resolveTsxCli()
-  const runnerEntry = join(repoRoot, 'packages', 'runner', 'src', 'index.ts')
+  const runnerArgs = resolveRunnerArgs()
 
   const child = spawn(
     nodeExe,
-    [tsxCli, runnerEntry],
+    runnerArgs,
     {
       cwd: repoRoot,
       env: {
@@ -144,6 +143,17 @@ function resolveTsxCli() {
     throw new Error('Could not find tsx cli.mjs for silent runner startup.')
   }
   return resolved
+}
+
+function resolveRunnerArgs() {
+  const compiledEntry = join(repoRoot, 'packages', 'runner', 'dist', 'index.js')
+  if (existsSync(compiledEntry)) {
+    return [compiledEntry]
+  }
+
+  const tsxCli = resolveTsxCli()
+  const sourceEntry = join(repoRoot, 'packages', 'runner', 'src', 'index.ts')
+  return [tsxCli, sourceEntry]
 }
 
 function safePort(runnerBaseUrl) {
