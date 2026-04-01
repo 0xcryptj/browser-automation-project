@@ -101,10 +101,13 @@ function launchRunner(runnerBaseUrl) {
   const port = safePort(runnerBaseUrl)
   const outFd = openSync(logPath, 'a')
   const errFd = openSync(logPath, 'a')
+  const nodeExe = resolveNodeExecutable()
+  const tsxCli = resolveTsxCli()
+  const runnerEntry = join(repoRoot, 'packages', 'runner', 'src', 'index.ts')
 
   const child = spawn(
-    'pnpm.cmd',
-    ['runner:start'],
+    nodeExe,
+    [tsxCli, runnerEntry],
     {
       cwd: repoRoot,
       env: {
@@ -118,6 +121,29 @@ function launchRunner(runnerBaseUrl) {
   )
 
   child.unref()
+}
+
+function resolveNodeExecutable() {
+  const candidates = [
+    process.env.NODE_PATH,
+    'C:\\Program Files\\nodejs\\node.exe',
+    'C:\\Program Files (x86)\\nodejs\\node.exe',
+  ]
+
+  return candidates.find((candidate) => candidate && existsSync(candidate)) ?? 'node.exe'
+}
+
+function resolveTsxCli() {
+  const candidates = [
+    join(repoRoot, 'node_modules', '.pnpm', 'tsx@4.21.0', 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+    join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+  ]
+
+  const resolved = candidates.find((candidate) => existsSync(candidate))
+  if (!resolved) {
+    throw new Error('Could not find tsx cli.mjs for silent runner startup.')
+  }
+  return resolved
 }
 
 function safePort(runnerBaseUrl) {

@@ -195,10 +195,13 @@ internal static class BrowserAutomationNativeHost
     private static void LaunchRunner(string runnerBaseUrl)
     {
         var port = SafePort(runnerBaseUrl);
+        var nodeExe = ResolveNodeExecutable();
+        var tsxCli = ResolveTsxCli();
+        var runnerEntry = Path.Combine(RepoRoot, "packages", "runner", "src", "index.ts");
         var startInfo = new ProcessStartInfo
         {
-            FileName = "pnpm.cmd",
-            Arguments = "runner:start",
+            FileName = nodeExe,
+            Arguments = string.Format("\"{0}\" \"{1}\"", tsxCli, runnerEntry),
             WorkingDirectory = RepoRoot,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -296,6 +299,47 @@ internal static class BrowserAutomationNativeHost
 
         Process.Start(startInfo);
         return executable;
+    }
+
+    private static string ResolveNodeExecutable()
+    {
+        var candidates = new[]
+        {
+            Environment.GetEnvironmentVariable("NODE_PATH"),
+            @"C:\Program Files\nodejs\node.exe",
+            @"C:\Program Files (x86)\nodejs\node.exe",
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "nodejs", "node.exe"),
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new InvalidOperationException("Could not find node.exe for silent runner startup.");
+    }
+
+    private static string ResolveTsxCli()
+    {
+        var candidates = new[]
+        {
+            Path.Combine(RepoRoot, "node_modules", ".pnpm", "tsx@4.21.0", "node_modules", "tsx", "dist", "cli.mjs"),
+            Path.Combine(RepoRoot, "node_modules", "tsx", "dist", "cli.mjs"),
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new InvalidOperationException("Could not find tsx cli.mjs for silent runner startup.");
     }
 
     private static Dictionary<string, object> WaitForJson(string url, int timeoutMs)
