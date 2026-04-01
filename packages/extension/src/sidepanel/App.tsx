@@ -573,13 +573,13 @@ export default function App() {
         <div
           style={{
             height: '100%',
-            overflowY: 'auto',
+            overflow: 'hidden',
             padding: 14,
           }}
         >
           {tab === 'tasks' && (
-            <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', gap: 14 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: 2 }}>
                 {isQuizCollapsed ? (
                   <CompactQuizView
                     state={state}
@@ -695,12 +695,13 @@ export default function App() {
 
               <div
                 style={{
-                  position: 'sticky',
-                  bottom: -14,
+                  flexShrink: 0,
                   margin: '0 -14px -14px',
                   padding: '14px',
-                  background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, color-mix(in srgb, var(--bg) 78%, transparent) 18%, var(--bg) 100%)',
-                  backdropFilter: 'blur(18px)',
+                  paddingTop: 10,
+                  background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, color-mix(in srgb, var(--bg) 72%, transparent) 16%, var(--bg) 100%)',
+                  backdropFilter: 'blur(18px) saturate(1.15)',
+                  borderTop: '1px solid color-mix(in srgb, var(--glass-border) 70%, transparent)',
                 }}
               >
                 <TaskInput

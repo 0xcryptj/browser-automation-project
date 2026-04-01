@@ -37,11 +37,11 @@ export function TaskInput({ onSubmit, disabled, compact = false }: Props) {
         flexDirection: 'column',
         gap: compact ? 0 : 10,
         padding: compact ? 10 : 12,
-        background: 'color-mix(in srgb, var(--panel) 86%, transparent)',
-        border: '1px solid var(--glass-border)',
-        borderRadius: compact ? 20 : 24,
-        boxShadow: 'var(--shadow)',
-        backdropFilter: 'blur(24px) saturate(1.25)',
+        background: 'color-mix(in srgb, var(--panel) 88%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--glass-border) 88%, transparent)',
+        borderRadius: compact ? 22 : 26,
+        boxShadow: '0 -1px 0 rgba(255,255,255,0.04) inset, var(--shadow)',
+        backdropFilter: 'blur(28px) saturate(1.28)',
       }}
     >
       <div
@@ -67,7 +67,7 @@ export function TaskInput({ onSubmit, disabled, compact = false }: Props) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder={compact ? 'Ask quietly...' : 'Ask anything...'}
+          placeholder={compact ? 'Ask quietly...' : 'Ask anything…'}
           rows={compact ? 1 : 3}
           style={{
             resize: compact ? 'none' : 'vertical',
@@ -133,7 +133,7 @@ export function TaskInput({ onSubmit, disabled, compact = false }: Props) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)', fontSize: 11 }}>
             <Keycap label="Enter" />
-            <span>send</span>
+            <span>to run</span>
           </div>
         </div>
       )}
