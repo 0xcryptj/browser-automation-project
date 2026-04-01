@@ -135,6 +135,36 @@ export function LiveTaskView({ state }: Props) {
         </div>
       )}
 
+      {state.status === 'streaming' && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '11px 13px',
+            background: 'linear-gradient(180deg, rgba(96,165,250,0.08), rgba(59,130,246,0.03))',
+            border: '1px solid rgba(96,165,250,0.20)',
+            borderRadius: 16,
+            color: 'var(--text-soft)',
+            fontSize: 12,
+            backdropFilter: 'blur(20px)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <OrbitDots />
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {activeStep
+                ? `Working in the browser tab: ${activeStep.description}`
+                : 'Working in the browser tab...'}
+            </span>
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--muted)', flexShrink: 0 }}>
+            {doneCount}/{state.stepCount || state.steps.length || '?'} done
+          </span>
+        </div>
+      )}
+
       {state.steps.length > 0 && (
         <div
           style={{
@@ -241,6 +271,26 @@ export function LiveTaskView({ state }: Props) {
                       }}
                     >
                       {step.error}
+                    </div>
+                  )}
+
+                  {step.status === 'failed' && step.hasScreenshot && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '5px 9px',
+                        background: 'rgba(96,165,250,0.08)',
+                        border: '1px solid rgba(96,165,250,0.18)',
+                        borderRadius: 999,
+                        fontSize: 11,
+                        color: 'var(--muted)',
+                      }}
+                    >
+                      <CameraIcon />
+                      Debug screenshot captured
                     </div>
                   )}
                 </div>
@@ -463,6 +513,15 @@ function TargetIcon() {
       <path d="M8 12.5v2" />
       <path d="M1.5 8h2" />
       <path d="M12.5 8h2" />
+    </svg>
+  )
+}
+
+function CameraIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 7h3l1.5-2h5L16 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
+      <circle cx="12" cy="13" r="3.5" />
     </svg>
   )
 }

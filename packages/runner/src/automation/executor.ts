@@ -123,13 +123,21 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
         workingContext = await refreshTaskContext(page, workingContext, plan.id, step.action.type)
       }
     } else {
-      updatedSteps[i] = { ...step, status: 'failed', error: result.error, durationMs: stepDuration }
+      updatedSteps[i] = {
+        ...step,
+        status: 'failed',
+        error: result.error,
+        durationMs: stepDuration,
+        screenshot: result.screenshot,
+      }
       taskBus.publish({
         type: 'step_failed',
         taskId: plan.id,
         stepIndex: i,
         error: result.error ?? 'Unknown error',
         retrying: false,
+        hasScreenshot: Boolean(result.screenshot),
+        pageUrl: safeUrl(page.url()) || workingContext?.url,
       })
       console.warn(`[executor] Step ${i} failed: ${result.error}`)
       // Navigation failures are fatal; others continue

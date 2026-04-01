@@ -36,6 +36,8 @@ export const TaskEvent = z.discriminatedUnion('type', [
     stepIndex: z.number(),
     error: z.string(),
     retrying: z.boolean().default(false),
+    hasScreenshot: z.boolean().default(false),
+    pageUrl: z.string().optional(),
   }),
   z.object({
     type: z.literal('approval_required'),

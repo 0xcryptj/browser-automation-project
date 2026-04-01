@@ -132,7 +132,14 @@ export async function runAction(page: Page, action: Action, context?: TaskContex
     return await handler(page, action, context)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    return { success: false, error: message }
+    let screenshot: string | undefined
+    try {
+      const buffer = await page.screenshot({ type: 'png', fullPage: false, animations: 'disabled' })
+      screenshot = buffer.toString('base64')
+    } catch {
+      screenshot = undefined
+    }
+    return { success: false, error: message, screenshot }
   }
 }
 

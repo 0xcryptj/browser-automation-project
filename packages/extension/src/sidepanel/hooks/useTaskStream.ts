@@ -267,6 +267,8 @@ function applyEvent(state: StreamState, event: TaskEvent): StreamState {
           index: event.stepIndex,
           status: 'failed',
           error: event.error,
+          hasScreenshot: event.hasScreenshot,
+          pageUrl: event.pageUrl,
         }),
       }
 

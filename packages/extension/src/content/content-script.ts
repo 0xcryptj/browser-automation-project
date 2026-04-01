@@ -75,10 +75,10 @@ function getOverlayRoot() {
         .ring.hidden { opacity: 0; transform: scale(0.98); }
         .badge {
           position: fixed;
-          min-width: 220px;
-          max-width: min(420px, calc(100vw - 24px));
-          border-radius: 16px;
-          padding: 10px 12px;
+          min-width: 240px;
+          max-width: min(460px, calc(100vw - 24px));
+          border-radius: 18px;
+          padding: 12px 13px;
           background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.92));
           border: 1px solid rgba(96, 165, 250, 0.32);
           box-shadow: 0 18px 48px rgba(2, 6, 23, 0.38);
@@ -91,7 +91,7 @@ function getOverlayRoot() {
         }
         .badge-row {
           display: flex;
-          align-items: flex-start;
+          align-items: stretch;
           justify-content: space-between;
           gap: 10px;
         }
@@ -109,7 +109,7 @@ function getOverlayRoot() {
         }
         .badge.approval .eyebrow { color: #d8b4fe; }
         .title {
-          font-size: 12px;
+          font-size: 13px;
           line-height: 1.4;
           font-weight: 600;
           margin-bottom: 2px;
@@ -122,15 +122,18 @@ function getOverlayRoot() {
         .badge.approval .subtitle { color: #d8b4fe; }
         .stop {
           pointer-events: auto;
-          border: 1px solid rgba(248,113,113,0.28);
-          background: rgba(127,29,29,0.26);
-          color: #fecaca;
-          border-radius: 999px;
-          padding: 6px 10px;
-          font-size: 11px;
+          border: 1px solid rgba(248,113,113,0.30);
+          background: linear-gradient(180deg, rgba(127,29,29,0.34), rgba(127,29,29,0.22));
+          color: #ffe4e6;
+          border-radius: 14px;
+          padding: 8px 12px;
+          font-size: 12px;
           font-weight: 600;
           cursor: pointer;
           flex-shrink: 0;
+          min-height: 36px;
+          align-self: center;
+          box-shadow: 0 10px 24px rgba(127,29,29,0.22);
         }
         .cursor {
           position: fixed;
@@ -178,14 +181,14 @@ function getOverlayRoot() {
       <div class="frame hidden"></div>
       <div class="ring hidden"></div>
       <div class="cursor hidden"></div>
-      <div class="badge" hidden>
+    <div class="badge" hidden>
         <div class="badge-row">
           <div class="badge-copy">
             <div class="eyebrow">Browser Assistant</div>
             <div class="title"></div>
             <div class="subtitle"></div>
           </div>
-          <button class="stop" hidden>Stop</button>
+          <button class="stop" hidden>Stop Task</button>
         </div>
       </div>
     `
