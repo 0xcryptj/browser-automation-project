@@ -13,3 +13,4 @@ packages/runner/dist/
 packages/shared/dist/
 *.tsbuildinfo
 .pnpm-store/
+tools/native-host/browser-automation-native-host.exe

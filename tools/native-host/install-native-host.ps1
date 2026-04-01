@@ -8,16 +8,39 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
-$hostCmd = Join-Path $PSScriptRoot 'browser-automation-native-host.cmd'
+$hostSource = Join-Path $PSScriptRoot 'BrowserAutomationNativeHost.cs'
+$hostExe = Join-Path $PSScriptRoot 'browser-automation-native-host.exe'
 $manifestDir = Join-Path $repoRoot 'packages\runner\.local\native-host'
 $manifestPath = Join-Path $manifestDir 'com.browser_automation.host.json'
 
 New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
 
+function Get-CscPath {
+  $candidates = @(
+    'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe',
+    'C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe'
+  )
+
+  foreach ($candidate in $candidates) {
+    if (Test-Path $candidate) {
+      return $candidate
+    }
+  }
+
+  throw 'Could not find csc.exe. Install the .NET Framework compiler to build the silent native host.'
+}
+
+$csc = Get-CscPath
+& $csc /nologo /target:exe /out:$hostExe /r:System.Web.Extensions.dll $hostSource
+
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $hostExe)) {
+  throw 'Failed to build browser-automation-native-host.exe'
+}
+
 $manifest = @{
   name = 'com.browser_automation.host'
   description = 'Browser Automation local runner launcher'
-  path = $hostCmd
+  path = $hostExe
   type = 'stdio'
   allowed_origins = @("chrome-extension://$ExtensionId/")
 }
