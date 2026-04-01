@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -41,14 +41,35 @@ if (result.status !== 0) {
 
 function resolveEsbuildExecutable() {
   const candidates = [
-    resolve(repoRoot, 'node_modules/.pnpm/@esbuild+win32-x64@0.27.4/node_modules/@esbuild/win32-x64/esbuild.exe'),
-    resolve(repoRoot, 'node_modules/.pnpm/@esbuild+win32-x64@0.21.5/node_modules/@esbuild/win32-x64/esbuild.exe'),
     resolve(repoRoot, 'node_modules/.pnpm/node_modules/.bin/esbuild'),
+    resolve(repoRoot, 'node_modules/.bin/esbuild'),
   ]
 
   for (const candidate of candidates) {
     if (existsSync(candidate)) {
       return candidate
+    }
+  }
+
+  const pnpmStore = resolve(repoRoot, 'node_modules/.pnpm')
+  if (existsSync(pnpmStore)) {
+    for (const entry of readdirSync(pnpmStore, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !entry.name.startsWith('@esbuild+win32-x64@')) {
+        continue
+      }
+
+      const candidate = resolve(
+        pnpmStore,
+        entry.name,
+        'node_modules',
+        '@esbuild',
+        'win32-x64',
+        'esbuild.exe'
+      )
+
+      if (existsSync(candidate)) {
+        return candidate
+      }
     }
   }
 

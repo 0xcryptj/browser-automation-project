@@ -346,7 +346,7 @@ export default function App() {
         overflow: 'hidden',
         background: 'var(--bg)',
         color: 'var(--text)',
-        fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, sans-serif',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, ui-sans-serif, system-ui, sans-serif',
         position: 'relative',
       }}
     >
@@ -359,7 +359,8 @@ export default function App() {
           borderBottom: '1px solid var(--glass-border)',
           flexShrink: 0,
           background: 'var(--header-bg)',
-          backdropFilter: 'blur(22px) saturate(1.28)',
+          backdropFilter: 'var(--glass-blur)',
+          WebkitBackdropFilter: 'var(--glass-blur)',
           boxShadow: '0 12px 32px rgba(0,0,0,0.12)',
           position: 'relative',
           zIndex: 1,
@@ -479,7 +480,8 @@ export default function App() {
                 boxShadow: 'var(--shadow)',
                 zIndex: 21,
                 overflow: 'hidden',
-                backdropFilter: 'blur(22px) saturate(1.28)',
+                backdropFilter: 'var(--glass-blur)',
+                WebkitBackdropFilter: 'var(--glass-blur)',
               }}
             >
               <div style={{ padding: 14, borderBottom: '1px solid var(--border)' }}>
@@ -688,7 +690,8 @@ export default function App() {
                   padding: '14px',
                   paddingTop: 10,
                   background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, color-mix(in srgb, var(--bg) 72%, transparent) 16%, var(--bg) 100%)',
-                  backdropFilter: 'blur(18px) saturate(1.15)',
+                  backdropFilter: 'var(--glass-blur)',
+                  WebkitBackdropFilter: 'var(--glass-blur)',
                   borderTop: '1px solid color-mix(in srgb, var(--glass-border) 70%, transparent)',
                 }}
               >
@@ -754,7 +757,7 @@ export default function App() {
 }
 
 function ConnectionCard({
-  runnerUrl,
+  runnerUrl: _runnerUrl,
   runnerStarting,
   launcherError,
   helperCommand,
@@ -767,6 +770,11 @@ function ConnectionCard({
   onStart: () => void
 }) {
   const [copied, setCopied] = useState(false)
+  const [showCommand, setShowCommand] = useState(false)
+  const isSetupNeeded = Boolean(
+    launcherError?.toLowerCase().includes('not found') ||
+    launcherError?.toLowerCase().includes('native messaging')
+  )
 
   const copyCommand = async () => {
     if (!helperCommand) return
@@ -784,42 +792,42 @@ function ConnectionCard({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
-        padding: 16,
+        gap: 14,
+        padding: '18px 16px',
         background: 'var(--panel)',
-        border: '1px solid var(--border)',
-        borderRadius: 20,
+        border: '1px solid var(--glass-border)',
+        borderRadius: 24,
         boxShadow: 'var(--shadow-soft)',
-      }}
+        backdropFilter: 'var(--glass-blur)',
+        WebkitBackdropFilter: 'var(--glass-blur)',
+      } as React.CSSProperties}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {runnerStarting ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <LoadingPulse />
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
-                  Starting local operator
-                </div>
-                <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--muted)' }}>
-                  Connecting to {runnerUrl}
-                </div>
-              </div>
+      {runnerStarting ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <LoadingPulse />
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em' }}>
+              Starting up
             </div>
-          ) : (
-            <>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-                Your local operator is offline
-              </div>
-              <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--muted)' }}>
-                The extension is set to use {runnerUrl}. The local operator will start automatically when needed.
-              </div>
-            </>
-          )}
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+              Your assistant is getting ready
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em', marginBottom: 4 }}>
+            {isSetupNeeded ? 'Setup required' : 'Not connected'}
+          </div>
+          <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--muted)' }}>
+            {isSetupNeeded
+              ? 'A one-time setup is needed to enable automatic startup. Run the setup command in your project folder, then click Try again.'
+              : "Your local assistant isn't running yet. Click Connect to start it."}
+          </div>
+        </div>
+      )}
 
-      {launcherError && (
+      {launcherError && !isSetupNeeded && (
         <div
           style={{
             fontSize: 12,
@@ -835,31 +843,54 @@ function ConnectionCard({
         </div>
       )}
 
-      {helperCommand && (
-        <div
-          style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 14,
-            padding: '11px 12px',
-            fontSize: 11,
-            color: 'var(--text-soft)',
-            lineHeight: 1.55,
-            wordBreak: 'break-word',
-          }}
-        >
-          <div style={{ marginBottom: 8, color: 'var(--muted)' }}>One-time setup command</div>
-          <code>{helperCommand}</code>
+      {isSetupNeeded && helperCommand && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <button
+            onClick={() => setShowCommand((v) => !v)}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: 'var(--muted)',
+              fontSize: 11,
+              cursor: 'pointer',
+              textAlign: 'left',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              fontFamily: 'inherit',
+            }}
+          >
+            <span style={{ fontSize: 8, opacity: 0.7 }}>{showCommand ? '▼' : '▶'}</span>
+            {showCommand ? 'Hide' : 'Show'} setup command
+          </button>
+          {showCommand && (
+            <div
+              style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: '10px 12px',
+                fontSize: 10,
+                color: 'var(--text-soft)',
+                lineHeight: 1.6,
+                wordBreak: 'break-all',
+                fontFamily: '"SF Mono", "Fira Code", Menlo, monospace',
+              }}
+            >
+              {helperCommand}
+            </div>
+          )}
         </div>
       )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={onStart} disabled={runnerStarting} style={primaryPillStyle}>
-          {runnerStarting ? 'Starting...' : 'Start local operator'}
+          {runnerStarting ? 'Starting...' : isSetupNeeded ? 'Try again' : 'Connect'}
         </button>
-        {helperCommand && (
+        {isSetupNeeded && helperCommand && (
           <button onClick={() => void copyCommand()} style={secondaryButtonStyle}>
-            {copied ? 'Copied' : 'Copy setup command'}
+            {copied ? 'Copied' : 'Copy command'}
           </button>
         )}
       </div>
@@ -905,7 +936,8 @@ function CompactQuizView({
           border: '1px solid var(--glass-border)',
           borderRadius: 22,
           boxShadow: 'var(--glass-shadow-soft)',
-          backdropFilter: 'blur(20px) saturate(1.2)',
+          backdropFilter: 'var(--glass-blur)',
+        WebkitBackdropFilter: 'var(--glass-blur)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -1071,7 +1103,8 @@ const menuButtonStyle: CSSProperties = {
   borderRadius: 14,
   color: 'var(--text)',
   cursor: 'pointer',
-  backdropFilter: 'blur(18px) saturate(1.25)',
+  backdropFilter: 'var(--glass-blur)',
+  WebkitBackdropFilter: 'var(--glass-blur)',
   boxShadow: 'var(--glass-shadow-soft)',
 }
 
@@ -1084,7 +1117,8 @@ const secondaryButtonStyle: CSSProperties = {
   fontSize: 11,
   padding: '8px 12px',
   cursor: 'pointer',
-  backdropFilter: 'blur(18px) saturate(1.2)',
+  backdropFilter: 'var(--glass-blur)',
+  WebkitBackdropFilter: 'var(--glass-blur)',
   boxShadow: 'var(--glass-shadow-soft)',
 }
 
@@ -1098,7 +1132,8 @@ const primaryPillStyle: CSSProperties = {
   padding: '9px 14px',
   cursor: 'pointer',
   boxShadow: '0 14px 30px rgba(49,102,255,0.22), inset 0 1px 0 rgba(255,255,255,0.28)',
-  backdropFilter: 'blur(18px) saturate(1.25)',
+  backdropFilter: 'var(--glass-blur)',
+  WebkitBackdropFilter: 'var(--glass-blur)',
 }
 
 const dangerButtonStyle: CSSProperties = {
@@ -1113,53 +1148,55 @@ const dangerButtonStyle: CSSProperties = {
 }
 
 const darkThemeVars: CSSProperties = {
-  ['--bg' as string]: 'linear-gradient(180deg, rgb(9 12 20) 0%, rgb(10 15 24) 48%, rgb(7 10 18) 100%)',
-  ['--header-bg' as string]: 'linear-gradient(180deg, rgba(14,20,33,0.76), rgba(13,17,28,0.62))',
-  ['--panel' as string]: 'linear-gradient(180deg, rgba(24,31,46,0.62), rgba(14,18,27,0.48))',
-  ['--panel-soft' as string]: 'linear-gradient(180deg, rgba(35,45,67,0.48), rgba(18,22,35,0.34))',
-  ['--surface' as string]: 'linear-gradient(180deg, rgba(17,22,34,0.72), rgba(11,15,24,0.62))',
-  ['--border' as string]: 'rgba(132,149,196,0.16)',
+  ['--bg' as string]: '#08090f',
+  ['--header-bg' as string]: 'rgba(10,11,18,0.82)',
+  ['--panel' as string]: 'rgba(22,27,42,0.54)',
+  ['--panel-soft' as string]: 'rgba(32,38,56,0.42)',
+  ['--surface' as string]: 'rgba(15,18,30,0.68)',
+  ['--border' as string]: 'rgba(255,255,255,0.08)',
   ['--glass-border' as string]: 'rgba(255,255,255,0.12)',
-  ['--glass-button' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))',
-  ['--button-grad' as string]: 'linear-gradient(180deg, rgba(115,168,255,0.95), rgba(60,120,255,0.78))',
-  ['--text' as string]: '#eef2f7',
-  ['--text-soft' as string]: '#cbd5e1',
-  ['--muted' as string]: '#7b8794',
-  ['--shadow' as string]: '0 24px 60px rgba(0,0,0,0.24)',
-  ['--shadow-soft' as string]: '0 16px 38px rgba(0,0,0,0.14)',
-  ['--glass-shadow-soft' as string]: '0 10px 28px rgba(0,0,0,0.12)',
-  ['--scrollbar' as string]: '#1f242c',
-  ['--danger' as string]: '#f87171',
-  ['--danger-bg' as string]: 'rgba(92,16,24,0.28)',
-  ['--danger-border' as string]: '#3c191b',
+  ['--glass-button' as string]: 'rgba(255,255,255,0.08)',
+  ['--button-grad' as string]: 'linear-gradient(160deg, rgba(140,185,255,0.98) 0%, rgba(65,125,255,0.88) 100%)',
+  ['--text' as string]: '#f2f5fa',
+  ['--text-soft' as string]: '#c4cdd9',
+  ['--muted' as string]: '#636d7a',
+  ['--shadow' as string]: '0 28px 64px rgba(0,0,0,0.32)',
+  ['--shadow-soft' as string]: '0 18px 40px rgba(0,0,0,0.18)',
+  ['--glass-shadow-soft' as string]: '0 12px 32px rgba(0,0,0,0.16)',
+  ['--scrollbar' as string]: '#1a1f2b',
+  ['--danger' as string]: '#ff6b6b',
+  ['--danger-bg' as string]: 'rgba(80,14,20,0.32)',
+  ['--danger-border' as string]: 'rgba(255,80,80,0.18)',
   ['--warning' as string]: '#fbbf24',
-  ['--warning-bg' as string]: 'rgba(86,62,12,0.24)',
-  ['--warning-border' as string]: '#3f3110',
+  ['--warning-bg' as string]: 'rgba(80,58,10,0.28)',
+  ['--warning-border' as string]: 'rgba(251,191,36,0.18)',
+  ['--glass-blur' as string]: 'blur(56px) saturate(2) brightness(1.02)',
 }
 
 const lightThemeVars: CSSProperties = {
-  ['--bg' as string]: 'linear-gradient(180deg, rgb(243 247 255) 0%, rgb(238 244 252) 42%, rgb(245 248 255) 100%)',
-  ['--header-bg' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.75), rgba(246,249,255,0.68))',
-  ['--panel' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.82), rgba(247,250,255,0.64))',
-  ['--panel-soft' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.78), rgba(238,244,255,0.6))',
-  ['--surface' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.76), rgba(244,248,255,0.68))',
-  ['--border' as string]: 'rgba(148,163,184,0.18)',
-  ['--glass-border' as string]: 'rgba(255,255,255,0.56)',
-  ['--glass-button' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.42))',
-  ['--button-grad' as string]: 'linear-gradient(180deg, rgba(126,177,255,0.92), rgba(75,128,255,0.76))',
-  ['--text' as string]: '#0f172a',
-  ['--text-soft' as string]: '#334155',
-  ['--muted' as string]: '#64748b',
-  ['--shadow' as string]: '0 24px 54px rgba(15,23,42,0.10)',
-  ['--shadow-soft' as string]: '0 16px 34px rgba(15,23,42,0.07)',
-  ['--glass-shadow-soft' as string]: '0 10px 22px rgba(15,23,42,0.05)',
-  ['--scrollbar' as string]: '#c9d4e1',
-  ['--danger' as string]: '#dc2626',
-  ['--danger-bg' as string]: 'rgba(255,241,242,0.78)',
-  ['--danger-border' as string]: '#fecdd3',
-  ['--warning' as string]: '#b45309',
-  ['--warning-bg' as string]: 'rgba(255,251,235,0.84)',
-  ['--warning-border' as string]: '#fde68a',
+  ['--bg' as string]: '#f2f4f8',
+  ['--header-bg' as string]: 'rgba(248,250,255,0.82)',
+  ['--panel' as string]: 'rgba(255,255,255,0.70)',
+  ['--panel-soft' as string]: 'rgba(248,250,255,0.74)',
+  ['--surface' as string]: 'rgba(255,255,255,0.80)',
+  ['--border' as string]: 'rgba(0,0,0,0.07)',
+  ['--glass-border' as string]: 'rgba(255,255,255,0.72)',
+  ['--glass-button' as string]: 'rgba(255,255,255,0.65)',
+  ['--button-grad' as string]: 'linear-gradient(160deg, rgba(90,150,255,0.96) 0%, rgba(50,115,255,0.84) 100%)',
+  ['--text' as string]: '#0d1117',
+  ['--text-soft' as string]: '#2d3748',
+  ['--muted' as string]: '#6b7280',
+  ['--shadow' as string]: '0 24px 56px rgba(0,0,0,0.10)',
+  ['--shadow-soft' as string]: '0 16px 36px rgba(0,0,0,0.07)',
+  ['--glass-shadow-soft' as string]: '0 10px 24px rgba(0,0,0,0.06)',
+  ['--scrollbar' as string]: '#d1d8e0',
+  ['--danger' as string]: '#e53e3e',
+  ['--danger-bg' as string]: 'rgba(255,235,236,0.88)',
+  ['--danger-border' as string]: 'rgba(229,62,62,0.22)',
+  ['--warning' as string]: '#b7791f',
+  ['--warning-bg' as string]: 'rgba(255,248,230,0.90)',
+  ['--warning-border' as string]: 'rgba(183,121,31,0.24)',
+  ['--glass-blur' as string]: 'blur(56px) saturate(1.8) brightness(1.01)',
 }
 
 function formatRunnerDetails(health: Awaited<ReturnType<typeof runnerClient.health>>) {

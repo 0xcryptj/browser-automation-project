@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { existsSync, mkdirSync, openSync } from 'node:fs'
+import { existsSync, mkdirSync, openSync, readdirSync } from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -134,15 +134,30 @@ function resolveNodeExecutable() {
 
 function resolveTsxCli() {
   const candidates = [
-    join(repoRoot, 'node_modules', '.pnpm', 'tsx@4.21.0', 'node_modules', 'tsx', 'dist', 'cli.mjs'),
     join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
   ]
 
   const resolved = candidates.find((candidate) => existsSync(candidate))
-  if (!resolved) {
-    throw new Error('Could not find tsx cli.mjs for silent runner startup.')
+  if (resolved) {
+    return resolved
   }
-  return resolved
+
+  const pnpmStore = join(repoRoot, 'node_modules', '.pnpm')
+  if (existsSync(pnpmStore)) {
+    const pnpmEntries = readdirSync(pnpmStore, { withFileTypes: true })
+    for (const entry of pnpmEntries) {
+      if (!entry.isDirectory() || !entry.name.startsWith('tsx@')) {
+        continue
+      }
+
+      const candidate = join(pnpmStore, entry.name, 'node_modules', 'tsx', 'dist', 'cli.mjs')
+      if (existsSync(candidate)) {
+        return candidate
+      }
+    }
+  }
+
+  throw new Error('Could not find tsx cli.mjs for silent runner startup.')
 }
 
 function resolveRunnerArgs() {
