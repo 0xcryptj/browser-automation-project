@@ -34,6 +34,7 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
       taskId: plan.id,
       stepIndex: firstApprovalIndex,
       action: plan.steps[firstApprovalIndex].action,
+      pageUrl: plan.context?.url,
     })
     return {
       taskId: plan.id,
@@ -71,6 +72,7 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
         taskId: plan.id,
         stepIndex: i,
         action: step.action,
+        pageUrl: safeUrl(page.url()) || workingContext?.url,
       })
       return {
         taskId: plan.id,
@@ -90,6 +92,7 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
       selector: step.action.selector ?? undefined,
       elementRef: step.action.elementRef ?? undefined,
       targetLabel: resolveTargetLabel(workingContext, step),
+      pageUrl: safeUrl(page.url()) || workingContext?.url,
     })
 
     const result = await runAction(page, step.action, workingContext)

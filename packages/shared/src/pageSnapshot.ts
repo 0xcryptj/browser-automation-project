@@ -9,10 +9,16 @@ const DEFAULT_OPTIONS: ObservationOptions = {
 }
 
 export function buildPageObservationScript(options?: Partial<ObservationOptions>) {
-  const resolvedOptions = { ...DEFAULT_OPTIONS, ...options }
+  void options
 
   return (input: ObservationOptions) => {
-    const opts = { ...resolvedOptions, ...input }
+    const opts = {
+      mode: input.mode ?? 'compact',
+      visibleOnly: input.visibleOnly ?? true,
+      interactiveOnly: input.interactiveOnly ?? false,
+      maxElements: input.maxElements ?? 60,
+      maxTextBlocks: input.maxTextBlocks ?? 20,
+    }
     const counters = { element: 0, form: 0, text: 0, link: 0 }
 
     const nextRef = (prefix: string) => {

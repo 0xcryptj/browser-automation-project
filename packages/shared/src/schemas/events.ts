@@ -20,6 +20,7 @@ export const TaskEvent = z.discriminatedUnion('type', [
     selector: z.string().optional(),
     elementRef: z.string().optional(),
     targetLabel: z.string().optional(),
+    pageUrl: z.string().optional(),
   }),
   z.object({
     type: z.literal('step_succeeded'),
@@ -41,6 +42,7 @@ export const TaskEvent = z.discriminatedUnion('type', [
     taskId: z.string(),
     stepIndex: z.number(),
     action: Action,
+    pageUrl: z.string().optional(),
   }),
   z.object({
     type: z.literal('task_completed'),

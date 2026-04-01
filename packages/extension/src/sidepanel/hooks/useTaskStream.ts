@@ -10,6 +10,7 @@ export type LiveStep = {
   selector?: string
   elementRef?: string
   targetLabel?: string
+  pageUrl?: string
   status: 'pending' | 'running' | 'done' | 'failed' | 'awaiting_approval' | 'skipped'
   result?: string
   error?: string
@@ -242,6 +243,7 @@ function applyEvent(state: StreamState, event: TaskEvent): StreamState {
           selector: event.selector,
           elementRef: event.elementRef,
           targetLabel: event.targetLabel,
+          pageUrl: event.pageUrl,
           status: 'running',
         }),
       }
@@ -278,6 +280,7 @@ function applyEvent(state: StreamState, event: TaskEvent): StreamState {
           selector: event.action.selector ?? undefined,
           elementRef: event.action.elementRef ?? undefined,
           targetLabel: event.action.selector ?? event.action.elementRef ?? undefined,
+          pageUrl: event.pageUrl,
           status: 'awaiting_approval',
         }),
       }
@@ -367,11 +370,13 @@ function syncOverlay(
       updateOverlay({
         type: 'TASK_OVERLAY_SHOW',
         payload: {
+          taskId: event.taskId,
           actionType: event.actionType,
           description: event.description,
           selector: event.selector,
           elementRef: event.elementRef,
           targetLabel: event.targetLabel,
+          pageUrl: event.pageUrl,
           status: 'running',
         },
       })
@@ -381,11 +386,13 @@ function syncOverlay(
       updateOverlay({
         type: 'TASK_OVERLAY_SHOW',
         payload: {
+          taskId: event.taskId,
           actionType: event.action.type,
           description: event.action.description,
           selector: event.action.selector ?? undefined,
           elementRef: event.action.elementRef ?? undefined,
           targetLabel: event.action.selector ?? event.action.elementRef ?? undefined,
+          pageUrl: event.pageUrl,
           status: 'awaiting_approval',
         },
       })

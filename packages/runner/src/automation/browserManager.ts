@@ -174,6 +174,21 @@ async function ensureAutomationWorkspace(preferred?: Pick<TaskContext, 'url' | '
     throw new Error('Cannot create automation workspace before launching the browser.')
   }
 
+  const browserTarget = await getResolvedBrowserConfig()
+
+  if (browserTarget.mode === 'attach') {
+    if (!canUseContext(context)) {
+      await createContext(preferred)
+    }
+
+    automationContext = context
+    if (!automationContext) {
+      throw new Error('Attached browser context was not available for automation.')
+    }
+
+    log('automation workspace reusing attached browser window')
+  }
+
   if (!canUseContext(automationContext)) {
     automationContext = null
     automationPage = null
@@ -204,7 +219,9 @@ async function ensureAutomationWorkspace(preferred?: Pick<TaskContext, 'url' | '
     if (!workspaceContext) {
       throw new Error('Automation workspace context was not available after initialization.')
     }
-    const existingPages = workspaceContext.pages().filter((page) => canUsePage(page))
+    const existingPages = workspaceContext
+      .pages()
+      .filter((page) => canUsePage(page) && page !== activePage)
     automationPage = existingPages[existingPages.length - 1] ?? null
   }
 

@@ -8,6 +8,7 @@ function collectContext(options?: Partial<ObservationOptions>) {
 }
 
 type OverlayPayload = {
+  taskId?: string
   actionType?: string
   description?: string
   selector?: string
@@ -88,6 +89,16 @@ function getOverlayRoot() {
           border-color: rgba(168, 85, 247, 0.34);
           color: #f3e8ff;
         }
+        .badge-row {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .badge-copy {
+          min-width: 0;
+          flex: 1;
+        }
         .eyebrow {
           font-size: 10px;
           text-transform: uppercase;
@@ -109,6 +120,18 @@ function getOverlayRoot() {
           color: #94a3b8;
         }
         .badge.approval .subtitle { color: #d8b4fe; }
+        .stop {
+          pointer-events: auto;
+          border: 1px solid rgba(248,113,113,0.28);
+          background: rgba(127,29,29,0.26);
+          color: #fecaca;
+          border-radius: 999px;
+          padding: 6px 10px;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+          flex-shrink: 0;
+        }
         .cursor {
           position: fixed;
           width: 20px;
@@ -156,9 +179,14 @@ function getOverlayRoot() {
       <div class="ring hidden"></div>
       <div class="cursor hidden"></div>
       <div class="badge" hidden>
-        <div class="eyebrow">Browser Assistant</div>
-        <div class="title"></div>
-        <div class="subtitle"></div>
+        <div class="badge-row">
+          <div class="badge-copy">
+            <div class="eyebrow">Browser Assistant</div>
+            <div class="title"></div>
+            <div class="subtitle"></div>
+          </div>
+          <button class="stop" hidden>Stop</button>
+        </div>
       </div>
     `
   }
@@ -170,6 +198,7 @@ function getOverlayRoot() {
     ring: host.shadowRoot!.querySelector('.ring') as HTMLDivElement,
     cursor: host.shadowRoot!.querySelector('.cursor') as HTMLDivElement,
     badge: host.shadowRoot!.querySelector('.badge') as HTMLDivElement,
+    stop: host.shadowRoot!.querySelector('.stop') as HTMLButtonElement,
     title: host.shadowRoot!.querySelector('.title') as HTMLDivElement,
     subtitle: host.shadowRoot!.querySelector('.subtitle') as HTMLDivElement,
   }
@@ -238,7 +267,7 @@ function clearOverlay() {
 }
 
 function renderOverlay(payload: OverlayPayload) {
-  const { frame, ring, cursor, badge, title, subtitle } = getOverlayRoot()
+  const { frame, ring, cursor, badge, stop, title, subtitle } = getOverlayRoot()
   const target = resolveOverlayTarget(payload)
   const approval = payload.status === 'awaiting_approval'
 
@@ -254,6 +283,13 @@ function renderOverlay(payload: OverlayPayload) {
     : target
       ? 'Target located on the current page - avoid interacting while the operator is working'
       : 'Working from the current page context - avoid interacting while the operator is working'
+  stop.hidden = !payload.taskId
+  stop.onclick = () => {
+    if (!payload.taskId) return
+    chrome.runtime.sendMessage({ type: 'OVERLAY_CANCEL_TASK', payload: { taskId: payload.taskId } }, () => {
+      void chrome.runtime.lastError
+    })
+  }
 
   if (target) {
     const rect = target.getBoundingClientRect()

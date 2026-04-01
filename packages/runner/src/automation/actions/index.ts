@@ -23,8 +23,7 @@ export const actionHandlers: Record<string, ActionHandler> = {
 
   click: async (page, action, context) => {
     const target = resolveTarget(action, context?.snapshot)
-    const locator = await findBestTargetLocator(page, action, context)
-    await locator.click()
+    await clickTarget(page, action, context)
     return ok(`Clicked ${target.label}`)
   },
 
@@ -78,9 +77,19 @@ export const actionHandlers: Record<string, ActionHandler> = {
     if (!action.key) return fail('press requires a key')
     const target = resolveTarget(action, context?.snapshot)
     if (target.selector || action.elementRef) {
-      const locator = await findBestTargetLocator(page, action, context)
-      await locator.press(action.key)
-      return ok(`Pressed ${action.key} on ${target.label}`)
+      try {
+        const locator = await findBestTargetLocator(page, action, context)
+        await locator.press(action.key)
+        return ok(`Pressed ${action.key} on ${target.label}`)
+      } catch (error) {
+        if (action.key.toLowerCase() === 'enter' && shouldFallbackToSubmitViaEnter(action)) {
+          const submitted = await submitViaEnter(page, context)
+          if (submitted) {
+            return ok(`Submitted with Enter for ${target.label}`)
+          }
+        }
+        throw error
+      }
     }
 
     await page.keyboard.press(action.key)
@@ -194,6 +203,23 @@ async function findBestTargetLocator(
   throw lastError instanceof Error
     ? lastError
     : new Error(`Could not find a visible target for ${target.label}`)
+}
+
+async function clickTarget(page: Page, action: Action, context?: TaskContext) {
+  try {
+    const locator = await findBestTargetLocator(page, action, context)
+    await locator.click()
+    return
+  } catch (error) {
+    if (shouldFallbackToSubmitViaEnter(action)) {
+      const submitted = await submitViaEnter(page, context)
+      if (submitted) {
+        return
+      }
+    }
+
+    throw error
+  }
 }
 
 function buildSelectorLocators(page: Page, selector: string) {
@@ -501,6 +527,70 @@ function escapeCssValue(value: string) {
 
 function firstNonEmpty(...values: Array<string | undefined>) {
   return values.find((value) => value?.trim())
+}
+
+function shouldFallbackToSubmitViaEnter(action: Action) {
+  const selector = action.selector?.toLowerCase() ?? ''
+  const description = action.description?.toLowerCase() ?? ''
+
+  return (
+    selector.includes('submit') ||
+    description.includes('submit search') ||
+    description.includes('search query') ||
+    description.includes('run search') ||
+    description.includes('search on youtube')
+  )
+}
+
+async function submitViaEnter(page: Page, context?: TaskContext) {
+  const searchTargets = [
+    'input[type="search"]',
+    'input[name="search_query"]',
+    'input[name="search"]',
+    'input[name="q"]',
+    'textarea[name="search_query"]',
+  ]
+
+  for (const selector of searchTargets) {
+    const locator = page.locator(selector).first()
+    try {
+      await locator.waitFor({ state: 'visible', timeout: 1200 })
+      await locator.focus()
+      await locator.press('Enter')
+      return true
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  if (context?.snapshot) {
+    const searchElement = context.snapshot.elements.find((element) =>
+      [element.name, element.placeholder, element.label, element.selector]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes('search')
+    )
+
+    if (searchElement?.selector) {
+      const locator = page.locator(searchElement.selector).first()
+      try {
+        await locator.waitFor({ state: 'visible', timeout: 1200 })
+        await locator.focus()
+        await locator.press('Enter')
+        return true
+      } catch {
+        // Fall through to page-level Enter.
+      }
+    }
+  }
+
+  try {
+    await page.keyboard.press('Enter')
+    return true
+  } catch {
+    return false
+  }
 }
 
 function inferIntentPhrases(action: Action) {

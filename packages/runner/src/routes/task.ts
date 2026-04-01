@@ -8,6 +8,7 @@ import { taskBus } from '../events/taskBus.js'
 // In-memory stores — replace with SQLite when persistence is needed
 const planStore = new Map<string, TaskPlan>()
 const resultStore = new Map<string, TaskResult>()
+let executionQueue = Promise.resolve()
 
 function buildFailedResult(taskPlan: TaskPlan, error: string): TaskResult {
   return {
@@ -18,6 +19,35 @@ function buildFailedResult(taskPlan: TaskPlan, error: string): TaskResult {
 }
 
 export async function taskRoutes(server: FastifyInstance) {
+  const enqueueExecution = (taskPlan: TaskPlan) => {
+    executionQueue = executionQueue
+      .catch(() => {
+        // Keep the queue moving after prior failures.
+      })
+      .then(async () => {
+        const result = await execute(taskPlan)
+        resultStore.set(result.taskId, result)
+        planStore.set(result.plan.id, result.plan)
+      })
+      .catch((err) => {
+        const error = err instanceof Error ? err.message : String(err)
+        const failedPlan: TaskPlan = {
+          ...taskPlan,
+          status: 'failed',
+          summary: taskPlan.summary ?? `Execution failed: ${error}`,
+        }
+        planStore.set(taskPlan.id, failedPlan)
+        resultStore.set(taskPlan.id, buildFailedResult(failedPlan, error))
+        taskBus.publish({
+          type: 'task_failed',
+          taskId: taskPlan.id,
+          error,
+        })
+      })
+
+    return executionQueue
+  }
+
   /**
    * POST /task
    * Validate → Plan (async, LLM or mock) → Start execution async → return 202 immediately.
@@ -94,26 +124,7 @@ export async function taskRoutes(server: FastifyInstance) {
     planStore.set(taskPlan.id, taskPlan)
 
     // Execute async — client streams via GET /task/:id/stream
-    execute(taskPlan)
-      .then((result) => {
-        resultStore.set(result.taskId, result)
-        planStore.set(result.plan.id, result.plan)
-      })
-      .catch((err) => {
-        const error = err instanceof Error ? err.message : String(err)
-        const failedPlan: TaskPlan = {
-          ...taskPlan,
-          status: 'failed',
-          summary: taskPlan.summary ?? `Execution failed: ${error}`,
-        }
-        planStore.set(taskPlan.id, failedPlan)
-        resultStore.set(taskPlan.id, buildFailedResult(failedPlan, error))
-        taskBus.publish({
-          type: 'task_failed',
-          taskId: taskPlan.id,
-          error,
-        })
-      })
+    void enqueueExecution(taskPlan)
 
     return reply.status(202).send({ taskId: taskPlan.id, plan: taskPlan })
   })
@@ -234,26 +245,7 @@ export async function taskRoutes(server: FastifyInstance) {
     const resumedPlan: TaskPlan = { ...stored, steps, status: 'planned' }
     planStore.set(resumedPlan.id, resumedPlan)
 
-    execute(resumedPlan)
-      .then((result) => {
-        resultStore.set(result.taskId, result)
-        planStore.set(result.plan.id, result.plan)
-      })
-      .catch((err) => {
-        const error = err instanceof Error ? err.message : String(err)
-        const failedPlan: TaskPlan = {
-          ...resumedPlan,
-          status: 'failed',
-          summary: resumedPlan.summary ?? `Execution failed: ${error}`,
-        }
-        planStore.set(resumedPlan.id, failedPlan)
-        resultStore.set(resumedPlan.id, buildFailedResult(failedPlan, error))
-        taskBus.publish({
-          type: 'task_failed',
-          taskId: stored.id,
-          error,
-        })
-      })
+    void enqueueExecution(resumedPlan)
 
     return reply.status(202).send({ taskId: stored.id, plan: resumedPlan })
   })

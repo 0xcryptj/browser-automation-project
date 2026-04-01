@@ -2,6 +2,7 @@
 import { DEFAULT_SETTINGS } from '@browser-automation/shared'
 
 const NATIVE_HOST_NAME = 'com.browser_automation.host'
+let lastOverlayTabIds: number[] = []
 
 async function getRunnerBaseUrl(): Promise<string> {
   try {
@@ -160,6 +161,55 @@ async function maybeEnsureRunnerOnOpen() {
   await ensureRunnerStarted(runnerUrl).catch(() => {})
 }
 
+function normalizeUrl(url?: string | null) {
+  return (url ?? '').trim().replace(/\/$/, '').toLowerCase()
+}
+
+async function findOverlayTargetTabs(pageUrl?: string) {
+  const tabs = await chrome.tabs.query({ currentWindow: true })
+  const candidateTabs = tabs.filter((tab) => typeof tab.id === 'number')
+  const normalizedTarget = normalizeUrl(pageUrl)
+
+  if (normalizedTarget) {
+    const exactMatches = candidateTabs.filter((tab) => normalizeUrl(tab.url) === normalizedTarget)
+    if (exactMatches.length > 0) {
+      return exactMatches
+        .sort((a, b) => Number(Boolean(b.active)) - Number(Boolean(a.active)))
+        .map((tab) => tab.id!)
+    }
+  }
+
+  const activeTab = candidateTabs.find((tab) => tab.active)
+  return activeTab?.id ? [activeTab.id] : []
+}
+
+async function sendOverlayMessageToTabs(
+  tabIds: number[],
+  message: { type: 'TASK_OVERLAY_SHOW' | 'TASK_OVERLAY_CLEAR'; payload?: Record<string, unknown> }
+) {
+  const uniqueIds = [...new Set(tabIds)]
+  let delivered = 0
+  let lastErrorMessage: string | null = null
+
+  await Promise.all(
+    uniqueIds.map(
+      (tabId) =>
+        new Promise<void>((resolve) => {
+          chrome.tabs.sendMessage(tabId, message, () => {
+            if (chrome.runtime.lastError) {
+              lastErrorMessage = chrome.runtime.lastError.message ?? 'Could not reach the page content script.'
+            } else {
+              delivered += 1
+            }
+            resolve()
+          })
+        })
+    )
+  )
+
+  return { delivered, lastErrorMessage }
+}
+
 // Open side panel when the action button is clicked
 chrome.action.onClicked.addListener((tab) => {
   if (tab.id) {
@@ -181,22 +231,36 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'TASK_OVERLAY_SHOW' || message.type === 'TASK_OVERLAY_CLEAR') {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const tab = tabs[0]
-      if (!tab?.id) {
-        sendResponse({ ok: false, error: 'No active tab' })
+    const payload = typeof message.payload === 'object' && message.payload ? message.payload : undefined
+    const pageUrl = typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined
+
+    ;(async () => {
+      const targetIds =
+        message.type === 'TASK_OVERLAY_SHOW'
+          ? await findOverlayTargetTabs(pageUrl)
+          : lastOverlayTabIds
+
+      if (targetIds.length === 0) {
+        sendResponse({ ok: false, error: 'No matching browser tab was available for the overlay.' })
         return
       }
 
-      chrome.tabs.sendMessage(tab.id, message, () => {
-        if (chrome.runtime.lastError) {
-          sendResponse({ ok: false, error: chrome.runtime.lastError.message })
-          return
+      const result = await sendOverlayMessageToTabs(targetIds, message)
+      if (result.delivered > 0) {
+        if (message.type === 'TASK_OVERLAY_SHOW') {
+          lastOverlayTabIds = targetIds
+        } else {
+          lastOverlayTabIds = []
         }
+        sendResponse({ ok: true, delivered: result.delivered })
+        return
+      }
 
-        sendResponse({ ok: true })
-      })
-    })
+      if (message.type === 'TASK_OVERLAY_CLEAR') {
+        lastOverlayTabIds = []
+      }
+      sendResponse({ ok: false, error: result.lastErrorMessage ?? 'Could not reach the target browser tab.' })
+    })()
     return true
   }
 
@@ -296,6 +360,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       )
       .then((r) => r.json())
       .then((data) => sendResponse({ ok: true, data }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }))
+    return true
+  }
+
+  if (message.type === 'OVERLAY_CANCEL_TASK') {
+    const { taskId } = message.payload ?? {}
+    if (!taskId || typeof taskId !== 'string') {
+      sendResponse({ ok: false, error: 'Missing taskId' })
+      return true
+    }
+
+    getRunnerBaseUrl()
+      .then((runnerUrl) =>
+        fetch(`${runnerUrl}/task/${taskId}/cancel`, {
+          method: 'POST',
+        })
+      )
+      .then(() => sendResponse({ ok: true }))
       .catch((err) => sendResponse({ ok: false, error: String(err) }))
     return true
   }
