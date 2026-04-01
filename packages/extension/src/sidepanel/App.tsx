@@ -46,6 +46,11 @@ export default function App() {
   const { state, submitTask, approve, cancel, reset, retryStream } = useTaskStream()
   const prevStatus = useRef(state.status)
   const attemptedAutoStart = useRef(false)
+  const isQuizMode = extensionSettings?.quizModeEnabled ?? false
+  const isQuizCollapsed = isQuizMode && (extensionSettings?.quizModeCollapsed ?? false)
+  const visibleNavItems = isQuizMode
+    ? NAV_ITEMS.filter((item) => item.id === 'tasks' || item.id === 'settings')
+    : NAV_ITEMS
 
   const resolvedTheme: ResolvedTheme = useMemo(() => {
     if (extensionSettings?.theme === 'light') return 'light'
@@ -114,13 +119,22 @@ export default function App() {
   }, [checkRunner])
 
   useEffect(() => {
-    if (runnerStatus !== 'disconnected' || attemptedAutoStart.current) {
+    if (attemptedAutoStart.current || extensionSettings === null) {
+      return
+    }
+
+    if (!extensionSettings.autoStartRunner) {
+      attemptedAutoStart.current = true
+      return
+    }
+
+    if (runnerStatus !== 'disconnected') {
       return
     }
 
     attemptedAutoStart.current = true
     void ensureLocalRunner()
-  }, [ensureLocalRunner, runnerStatus])
+  }, [ensureLocalRunner, extensionSettings, runnerStatus])
 
   useEffect(() => {
     const prev = prevStatus.current
@@ -152,6 +166,12 @@ export default function App() {
       })
     }
   }, [state.status, state.taskId, state.prompt, state.steps.length, state.durationMs])
+
+  useEffect(() => {
+    if (isQuizMode && tab !== 'tasks' && tab !== 'settings') {
+      setTab('tasks')
+    }
+  }, [isQuizMode, tab])
 
   const collectPage = useCallback(async (mode: 'task' | 'observe' = 'observe'): Promise<PageObservation | null> => {
     setObserveLoading(true)
@@ -251,7 +271,7 @@ export default function App() {
     state.steps.length > 0
 
   const themeVars = resolvedTheme === 'light' ? lightThemeVars : darkThemeVars
-  const currentTabMeta = NAV_ITEMS.find((item) => item.id === tab) ?? NAV_ITEMS[0]
+  const currentTabMeta = visibleNavItems.find((item) => item.id === tab) ?? visibleNavItems[0] ?? NAV_ITEMS[0]
   const topBanner = runnerStatus === 'disconnected'
     ? null
     : runnerWarning ?? pageAccessMessage
@@ -325,6 +345,23 @@ export default function App() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {isQuizMode && (
+            <button
+              onClick={async () => {
+                const next = {
+                  ...(extensionSettings ?? (await getSettings())),
+                  quizModeCollapsed: !isQuizCollapsed,
+                }
+                setExtensionSettings(next)
+                await saveSettings(next)
+              }}
+              style={menuButtonStyle}
+              title={isQuizCollapsed ? 'Expand quiz mode' : 'Collapse quiz mode'}
+            >
+              {isQuizCollapsed ? <ExpandIcon /> : <CollapseIcon />}
+            </button>
+          )}
+
           {tab === 'tasks' && isRunning && (
             <button onClick={() => void cancel()} style={dangerButtonStyle}>
               Cancel
@@ -349,7 +386,7 @@ export default function App() {
         </div>
       </div>
 
-      {runnerStatus === 'connected' && runnerDetails && (
+      {runnerStatus === 'connected' && runnerDetails && !isQuizCollapsed && (
         <div style={{ padding: '8px 14px 0', flexShrink: 0 }}>
           <div
             style={{
@@ -390,7 +427,7 @@ export default function App() {
         </div>
       )}
 
-      {topBanner && (
+      {topBanner && !isQuizCollapsed && (
         <Banner tone={runnerStatus === 'disconnected' ? 'danger' : 'warning'}>
           {topBanner}
         </Banner>
@@ -439,7 +476,7 @@ export default function App() {
               </div>
 
               <div style={{ padding: 8 }}>
-                {NAV_ITEMS.map((item) => (
+                {visibleNavItems.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => {
@@ -462,6 +499,35 @@ export default function App() {
                   </button>
                 ))}
               </div>
+
+              {isQuizMode && (
+                <div style={{ padding: '0 14px 10px' }}>
+                  <button
+                    onClick={async () => {
+                      const next = {
+                        ...(extensionSettings ?? (await getSettings())),
+                        quizModeCollapsed: !isQuizCollapsed,
+                      }
+                      setExtensionSettings(next)
+                      await saveSettings(next)
+                      setMenuOpen(false)
+                    }}
+                    style={{
+                      width: '100%',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      color: 'var(--text)',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: '9px 10px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {isQuizCollapsed ? 'Expand Quiz Mode' : 'Collapse Quiz Mode'}
+                  </button>
+                </div>
+              )}
 
               <div style={{ padding: '0 14px 14px', display: 'flex', gap: 8 }}>
                 {(['system', 'dark', 'light'] as const).map((themeOption) => (
@@ -503,99 +569,116 @@ export default function App() {
           {tab === 'tasks' && (
             <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', gap: 14 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
-                {hasResult && <LiveTaskView state={state} />}
-
-                {(runnerStatus !== 'connected' || runnerStarting || launcherError) && (
-                  <ConnectionCard
-                    runnerUrl={runnerUrl}
+                {isQuizCollapsed ? (
+                  <CompactQuizView
+                    state={state}
+                    runnerStatus={runnerStatus}
                     runnerStarting={runnerStarting}
                     launcherError={launcherError}
-                    helperCommand={launcherHelperCommand}
-                    onStart={() => void ensureLocalRunner()}
+                    onRetry={() => void retryStream()}
+                    onTryAgain={() => state.prompt && void handleSubmit(state.prompt)}
                   />
-                )}
+                ) : (
+                  <>
+                    {hasResult && <LiveTaskView state={state} />}
 
-                {state.status === 'error' && state.taskId && (
-                  <button onClick={() => void retryStream()} style={secondaryButtonStyle}>
-                    Retry stream
-                  </button>
-                )}
+                    {(runnerStatus !== 'connected' || runnerStarting || launcherError) && (
+                      <ConnectionCard
+                        runnerUrl={runnerUrl}
+                        runnerStarting={runnerStarting}
+                        launcherError={launcherError}
+                        helperCommand={launcherHelperCommand}
+                        onStart={() => void ensureLocalRunner()}
+                      />
+                    )}
 
-                {state.status === 'error' && !state.taskId && state.prompt && (
-                  <button onClick={() => void handleSubmit(state.prompt)} style={secondaryButtonStyle}>
-                    Try again
-                  </button>
-                )}
+                    {state.status === 'error' && state.taskId && (
+                      <button onClick={() => void retryStream()} style={secondaryButtonStyle}>
+                        Retry stream
+                      </button>
+                    )}
 
-                {!hasResult && runnerStatus === 'connected' && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 18,
-                      padding: '36px 10px 18px',
-                      minHeight: 320,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 12,
-                        textAlign: 'center',
-                        maxWidth: 320,
-                      }}
-                    >
+                    {state.status === 'error' && !state.taskId && state.prompt && (
+                      <button onClick={() => void handleSubmit(state.prompt)} style={secondaryButtonStyle}>
+                        Try again
+                      </button>
+                    )}
+
+                    {!hasResult && runnerStatus === 'connected' && (
                       <div
                         style={{
-                          width: 64,
-                          height: 64,
-                          borderRadius: '50%',
-                          background: 'radial-gradient(circle at 35% 35%, rgba(255,255,255,0.9), rgba(115,168,255,0.84) 38%, rgba(32,77,187,0.78) 66%, rgba(7,18,41,0.82))',
-                          boxShadow: '0 0 0 14px rgba(116,173,255,0.10), 0 18px 40px rgba(24,72,191,0.18)',
-                        }}
-                      />
-                      <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.03em' }}>
-                        Ask anything
-                      </div>
-                      <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--muted)' }}>
-                        Read the page, click through flows, fill visible forms, or ask for a summary while the operator works in your browser.
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-                      {[
-                      'Go to example.com',
-                      'Extract the main heading',
-                      'Tell me what I am viewing',
-                      'Search for TypeScript on google.com',
-                      'Take a screenshot of this page',
-                    ].map((examplePrompt) => (
-                      <button
-                        key={examplePrompt}
-                        onClick={() => void handleSubmit(examplePrompt)}
-                        disabled={isRunning || runnerStatus !== 'connected'}
-                        style={{
-                          background: 'var(--panel)',
-                          border: '1px solid var(--glass-border)',
-                          borderRadius: 999,
-                          color: 'var(--text-soft)',
-                          fontSize: 12,
-                          padding: '9px 12px',
-                          cursor: isRunning || runnerStatus !== 'connected' ? 'not-allowed' : 'pointer',
-                          textAlign: 'left',
-                          boxShadow: 'var(--glass-shadow-soft)',
-                          backdropFilter: 'blur(16px) saturate(1.2)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 18,
+                          padding: '36px 10px 18px',
+                          minHeight: 320,
                         }}
                       >
-                        {examplePrompt}
-                      </button>
-                    ))}
-                  </div>
-                  </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: 12,
+                            textAlign: 'center',
+                            maxWidth: 320,
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 64,
+                              height: 64,
+                              borderRadius: '50%',
+                              background: 'radial-gradient(circle at 35% 35%, rgba(255,255,255,0.9), rgba(115,168,255,0.84) 38%, rgba(32,77,187,0.78) 66%, rgba(7,18,41,0.82))',
+                              boxShadow: '0 0 0 14px rgba(116,173,255,0.10), 0 18px 40px rgba(24,72,191,0.18)',
+                            }}
+                          />
+                          <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.03em' }}>
+                            {isQuizMode ? 'Quiz mode' : 'Ask anything'}
+                          </div>
+                          <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--muted)' }}>
+                            {isQuizMode
+                              ? 'Keep the panel discreet while you practice. Ask for hints, quick explanations, or short page summaries.'
+                              : 'Read the page, click through flows, fill visible forms, or ask for a summary while the operator works in your browser.'}
+                          </div>
+                        </div>
+
+                        {!isQuizMode && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                            {[
+                            'Go to example.com',
+                            'Extract the main heading',
+                            'Tell me what I am viewing',
+                            'Search for TypeScript on google.com',
+                            'Take a screenshot of this page',
+                          ].map((examplePrompt) => (
+                            <button
+                              key={examplePrompt}
+                              onClick={() => void handleSubmit(examplePrompt)}
+                              disabled={isRunning || runnerStatus !== 'connected'}
+                              style={{
+                                background: 'var(--panel)',
+                                border: '1px solid var(--glass-border)',
+                                borderRadius: 999,
+                                color: 'var(--text-soft)',
+                                fontSize: 12,
+                                padding: '9px 12px',
+                                cursor: isRunning || runnerStatus !== 'connected' ? 'not-allowed' : 'pointer',
+                                textAlign: 'left',
+                                boxShadow: 'var(--glass-shadow-soft)',
+                                backdropFilter: 'blur(16px) saturate(1.2)',
+                              }}
+                            >
+                              {examplePrompt}
+                            </button>
+                          ))}
+                        </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -609,7 +692,11 @@ export default function App() {
                   backdropFilter: 'blur(18px)',
                 }}
               >
-                <TaskInput onSubmit={handleSubmit} disabled={isRunning || runnerStatus !== 'connected'} />
+                <TaskInput
+                  onSubmit={handleSubmit}
+                  disabled={isRunning || runnerStatus !== 'connected'}
+                  compact={isQuizCollapsed}
+                />
               </div>
             </div>
           )}
@@ -776,6 +863,95 @@ function ConnectionCard({
   )
 }
 
+function CompactQuizView({
+  state,
+  runnerStatus,
+  runnerStarting,
+  launcherError,
+  onRetry,
+  onTryAgain,
+}: {
+  state: ReturnType<typeof useTaskStream>['state']
+  runnerStatus: RunnerStatus
+  runnerStarting: boolean
+  launcherError: string | null
+  onRetry: () => void
+  onTryAgain: () => void
+}) {
+  const answer = state.steps
+    .filter((step) => step.status === 'done' && step.result)
+    .map((step) => step.result)
+    .filter(Boolean)
+    .slice(-1)[0]
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        minHeight: 180,
+        justifyContent: 'center',
+      }}
+    >
+      <div
+        style={{
+          padding: '16px 14px',
+          background: 'var(--panel)',
+          border: '1px solid var(--glass-border)',
+          borderRadius: 22,
+          boxShadow: 'var(--glass-shadow-soft)',
+          backdropFilter: 'blur(20px) saturate(1.2)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span
+            style={{
+              width: 9,
+              height: 9,
+              borderRadius: '50%',
+              background: runnerStatus === 'connected' ? '#34d399' : runnerStarting ? '#60a5fa' : '#f59e0b',
+              boxShadow: `0 0 0 6px ${
+                runnerStatus === 'connected'
+                  ? 'rgba(52,211,153,0.12)'
+                  : runnerStarting
+                    ? 'rgba(96,165,250,0.12)'
+                    : 'rgba(245,158,11,0.12)'
+              }`,
+            }}
+          />
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>Quiz mode</div>
+        </div>
+
+        <div style={{ fontSize: 13, color: 'var(--text-soft)', lineHeight: 1.6 }}>
+          {answer ||
+            (launcherError
+              ? launcherError
+              : state.status === 'planning'
+                ? 'Preparing a quick answer...'
+                : state.status === 'streaming'
+                  ? 'Working quietly in the background...'
+                  : 'Ask for a hint, a short summary, or a quick explanation.')}
+        </div>
+      </div>
+
+      {state.status === 'error' && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {state.taskId ? (
+            <button onClick={onRetry} style={secondaryButtonStyle}>
+              Retry stream
+            </button>
+          ) : (
+            <button onClick={onTryAgain} style={secondaryButtonStyle}>
+              Try again
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Banner({ tone, children }: { tone: 'danger' | 'warning'; children: ReactNode }) {
   const palette =
     tone === 'danger'
@@ -805,6 +981,24 @@ function HamburgerIcon() {
       <path d="M3 4.5h10" />
       <path d="M3 8h10" />
       <path d="M3 11.5h10" />
+    </svg>
+  )
+}
+
+function CollapseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 8h10" />
+      <path d="m9.5 5.5 2.5 2.5-2.5 2.5" />
+    </svg>
+  )
+}
+
+function ExpandIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 8h10" />
+      <path d="M6.5 5.5 4 8l2.5 2.5" />
     </svg>
   )
 }

@@ -16,6 +16,15 @@ async function getRunnerBaseUrl(): Promise<string> {
   }
 }
 
+async function shouldAutoStartRunner() {
+  try {
+    const stored = await chrome.storage.sync.get('settings')
+    return stored.settings?.autoStartRunner !== false
+  } catch {
+    return DEFAULT_SETTINGS.autoStartRunner
+  }
+}
+
 function getTabAccessIssue(url?: string) {
   if (!url) {
     return 'The active tab does not expose a readable URL yet.'
@@ -143,15 +152,32 @@ async function ensureBrowserAttach(browser: 'brave' | 'chrome', cdpUrl?: string)
   }
 }
 
+async function maybeEnsureRunnerOnOpen() {
+  const autoStart = await shouldAutoStartRunner()
+  if (!autoStart) return
+
+  const runnerUrl = await getRunnerBaseUrl()
+  await ensureRunnerStarted(runnerUrl).catch(() => {})
+}
+
 // Open side panel when the action button is clicked
 chrome.action.onClicked.addListener((tab) => {
   if (tab.id) {
+    void maybeEnsureRunnerOnOpen()
     chrome.sidePanel.open({ tabId: tab.id })
   }
 })
 
 // Set the side panel behavior
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error)
+
+chrome.runtime.onStartup.addListener(() => {
+  void maybeEnsureRunnerOnOpen()
+})
+
+chrome.runtime.onInstalled.addListener(() => {
+  void maybeEnsureRunnerOnOpen()
+})
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'TASK_OVERLAY_SHOW' || message.type === 'TASK_OVERLAY_CLEAR') {

@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 interface Props {
   onSubmit: (prompt: string) => void
   disabled?: boolean
+  compact?: boolean
 }
 
-export function TaskInput({ onSubmit, disabled }: Props) {
+export function TaskInput({ onSubmit, disabled, compact = false }: Props) {
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -34,11 +35,11 @@ export function TaskInput({ onSubmit, disabled }: Props) {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
-        padding: 12,
+        gap: compact ? 0 : 10,
+        padding: compact ? 10 : 12,
         background: 'color-mix(in srgb, var(--panel) 86%, transparent)',
         border: '1px solid var(--glass-border)',
-        borderRadius: 24,
+        borderRadius: compact ? 20 : 24,
         boxShadow: 'var(--shadow)',
         backdropFilter: 'blur(24px) saturate(1.25)',
       }}
@@ -46,28 +47,19 @@ export function TaskInput({ onSubmit, disabled }: Props) {
       <div
         style={{
           display: 'flex',
-          alignItems: 'flex-start',
+          alignItems: compact ? 'center' : 'flex-start',
           gap: 10,
         }}
       >
-        <button
-          type="button"
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: '50%',
-            border: '1px solid var(--glass-border)',
-            background: 'var(--glass-button)',
-            color: 'var(--muted)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-          }}
-          title="Tools coming next"
-        >
-          <PlusIcon />
-        </button>
+        {!compact && (
+          <button
+            type="button"
+            style={iconButtonStyle}
+            title="Tools coming next"
+          >
+            <PlusIcon />
+          </button>
+        )}
 
         <textarea
           ref={textareaRef}
@@ -75,19 +67,20 @@ export function TaskInput({ onSubmit, disabled }: Props) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder="Ask anything…"
-          rows={3}
+          placeholder={compact ? 'Ask quietly...' : 'Ask anything...'}
+          rows={compact ? 1 : 3}
           style={{
-            resize: 'none',
+            resize: compact ? 'none' : 'vertical',
             background: 'transparent',
             border: 'none',
             color: 'var(--text)',
-            fontSize: 14,
-            lineHeight: 1.6,
-            padding: '4px 0 0',
+            fontSize: compact ? 13 : 14,
+            lineHeight: compact ? 1.45 : 1.6,
+            padding: compact ? '8px 0 0' : '4px 0 0',
             width: '100%',
             outline: 'none',
             fontFamily: 'inherit',
+            minHeight: compact ? 34 : undefined,
           }}
         />
 
@@ -95,9 +88,9 @@ export function TaskInput({ onSubmit, disabled }: Props) {
           onClick={handleSubmit}
           disabled={!canSubmit}
           style={{
-            width: 38,
-            height: 38,
-            alignSelf: 'flex-end',
+            width: compact ? 34 : 38,
+            height: compact ? 34 : 38,
+            alignSelf: compact ? 'center' : 'flex-end',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -117,53 +110,40 @@ export function TaskInput({ onSubmit, disabled }: Props) {
         </button>
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 8,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: 11 }}>
-          <div
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: disabled ? '#f59e0b' : '#22c55e',
-              boxShadow: `0 0 0 4px ${disabled ? 'rgba(245,158,11,0.12)' : 'rgba(34,197,94,0.12)'}`,
-            }}
-          />
-          <span>{disabled ? 'Working in the browser' : 'Ready to read, click, type, and automate'}</span>
+      {!compact && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: 11 }}>
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: disabled ? '#f59e0b' : '#22c55e',
+                boxShadow: `0 0 0 4px ${disabled ? 'rgba(245,158,11,0.12)' : 'rgba(34,197,94,0.12)'}`,
+              }}
+            />
+            <span>{disabled ? 'Working in the browser' : 'Ready to read, click, type, and automate'}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)', fontSize: 11 }}>
+            <Keycap label="Enter" />
+            <span>send</span>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)', fontSize: 11 }}>
-          <Keycap label="Enter" />
-          <span>send</span>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
 
 function Keycap({ label }: { label: string }) {
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minWidth: 34,
-        height: 22,
-        padding: '0 8px',
-        borderRadius: 8,
-        background: 'var(--glass-button)',
-        border: '1px solid var(--glass-border)',
-        color: 'var(--text-soft)',
-        fontSize: 10,
-        fontWeight: 600,
-      }}
-    >
+    <span style={keycapStyle}>
       {label}
     </span>
   )
@@ -185,4 +165,32 @@ function PlusIcon() {
       <path d="M3 8h10" />
     </svg>
   )
+}
+
+const iconButtonStyle = {
+  width: 32,
+  height: 32,
+  borderRadius: '50%',
+  border: '1px solid var(--glass-border)',
+  background: 'var(--glass-button)',
+  color: 'var(--muted)',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexShrink: 0,
+}
+
+const keycapStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: 34,
+  height: 22,
+  padding: '0 8px',
+  borderRadius: 8,
+  background: 'var(--glass-button)',
+  border: '1px solid var(--glass-border)',
+  color: 'var(--text-soft)',
+  fontSize: 10,
+  fontWeight: 600,
 }

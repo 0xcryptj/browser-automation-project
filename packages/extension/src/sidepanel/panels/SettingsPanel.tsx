@@ -248,6 +248,42 @@ export function SettingsPanel({
           </Field>
 
           <Toggle
+            label="Start the local runner automatically when the extension opens"
+            value={settings.autoStartRunner}
+            onChange={(value) => {
+              const next = { ...settings, autoStartRunner: value }
+              setSettings(next)
+              onSettingsChange?.(next)
+            }}
+          />
+
+          <Toggle
+            label="Enable quiz mode"
+            value={settings.quizModeEnabled}
+            onChange={(value) => {
+              const next = {
+                ...settings,
+                quizModeEnabled: value,
+                quizModeCollapsed: value ? settings.quizModeCollapsed : false,
+              }
+              setSettings(next)
+              onSettingsChange?.(next)
+            }}
+          />
+
+          {settings.quizModeEnabled && (
+            <Toggle
+              label="Open quiz mode in collapsed view"
+              value={settings.quizModeCollapsed}
+              onChange={(value) => {
+                const next = { ...settings, quizModeCollapsed: value }
+                setSettings(next)
+                onSettingsChange?.(next)
+              }}
+            />
+          )}
+
+          <Toggle
             label="Show observation debug JSON"
             value={settings.showObservationDebug}
             onChange={(value) => {
