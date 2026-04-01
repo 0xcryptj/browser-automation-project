@@ -36,6 +36,27 @@ function getOverlayRoot() {
     shadow.innerHTML = `
       <style>
         :host { all: initial; }
+        .frame {
+          position: fixed;
+          inset: 8px;
+          border-radius: 22px;
+          border: 2px solid rgba(96, 165, 250, 0.4);
+          box-shadow:
+            inset 0 0 0 1px rgba(191, 219, 254, 0.18),
+            0 0 0 1px rgba(59,130,246,0.08),
+            0 0 46px rgba(59,130,246,0.16);
+          background: linear-gradient(180deg, rgba(96,165,250,0.03), rgba(59,130,246,0.01));
+          animation: frame-breathe 1.8s ease-in-out infinite;
+        }
+        .frame.approval {
+          border-color: rgba(168, 85, 247, 0.42);
+          box-shadow:
+            inset 0 0 0 1px rgba(216, 180, 254, 0.18),
+            0 0 0 1px rgba(168,85,247,0.08),
+            0 0 52px rgba(168,85,247,0.18);
+          background: linear-gradient(180deg, rgba(168,85,247,0.04), rgba(76,29,149,0.01));
+        }
+        .frame.hidden { opacity: 0; }
         .ring {
           position: fixed;
           border-radius: 18px;
@@ -88,12 +109,52 @@ function getOverlayRoot() {
           color: #94a3b8;
         }
         .badge.approval .subtitle { color: #d8b4fe; }
+        .cursor {
+          position: fixed;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.95), rgba(96,165,250,0.95) 48%, rgba(37,99,235,0.92));
+          box-shadow: 0 0 0 8px rgba(96,165,250,0.12), 0 12px 24px rgba(37,99,235,0.24);
+          transition:
+            left 260ms cubic-bezier(0.22, 1, 0.36, 1),
+            top 260ms cubic-bezier(0.22, 1, 0.36, 1),
+            opacity 140ms ease,
+            transform 140ms ease;
+          transform: translate(-50%, -50%);
+        }
+        .cursor::after {
+          content: '';
+          position: absolute;
+          inset: -10px;
+          border-radius: 50%;
+          border: 1px solid rgba(147,197,253,0.36);
+          animation: cursor-ping 1.2s ease-out infinite;
+        }
+        .cursor.approval {
+          background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.94), rgba(192,132,252,0.95) 48%, rgba(126,34,206,0.92));
+          box-shadow: 0 0 0 8px rgba(168,85,247,0.12), 0 12px 24px rgba(126,34,206,0.22);
+        }
+        .cursor.hidden {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(0.86);
+        }
         @keyframes pulse-ring {
           0%, 100% { transform: scale(0.99); opacity: 0.96; }
           50% { transform: scale(1.02); opacity: 0.72; }
         }
+        @keyframes frame-breathe {
+          0%, 100% { opacity: 0.72; }
+          50% { opacity: 1; }
+        }
+        @keyframes cursor-ping {
+          0% { transform: scale(0.8); opacity: 0.8; }
+          100% { transform: scale(1.55); opacity: 0; }
+        }
       </style>
+      <div class="frame hidden"></div>
       <div class="ring hidden"></div>
+      <div class="cursor hidden"></div>
       <div class="badge" hidden>
         <div class="eyebrow">Browser Assistant</div>
         <div class="title"></div>
@@ -105,7 +166,9 @@ function getOverlayRoot() {
   return {
     host,
     shadow: host.shadowRoot!,
+    frame: host.shadowRoot!.querySelector('.frame') as HTMLDivElement,
     ring: host.shadowRoot!.querySelector('.ring') as HTMLDivElement,
+    cursor: host.shadowRoot!.querySelector('.cursor') as HTMLDivElement,
     badge: host.shadowRoot!.querySelector('.badge') as HTMLDivElement,
     title: host.shadowRoot!.querySelector('.title') as HTMLDivElement,
     subtitle: host.shadowRoot!.querySelector('.subtitle') as HTMLDivElement,
@@ -167,34 +230,44 @@ function clearOverlay() {
     overlayFrame = null
   }
 
-  const { ring, badge } = getOverlayRoot()
+  const { frame, ring, cursor, badge } = getOverlayRoot()
+  frame.classList.add('hidden')
   ring.classList.add('hidden')
+  cursor.classList.add('hidden')
   badge.hidden = true
 }
 
 function renderOverlay(payload: OverlayPayload) {
-  const { ring, badge, title, subtitle } = getOverlayRoot()
+  const { frame, ring, cursor, badge, title, subtitle } = getOverlayRoot()
   const target = resolveOverlayTarget(payload)
   const approval = payload.status === 'awaiting_approval'
 
+  frame.classList.toggle('approval', approval)
   ring.classList.toggle('approval', approval)
+  cursor.classList.toggle('approval', approval)
   badge.classList.toggle('approval', approval)
+  frame.classList.remove('hidden')
 
   title.textContent = payload.description ?? describeAction(payload.actionType)
   subtitle.textContent = payload.targetLabel
-    ? `Target: ${payload.targetLabel}`
+    ? `Target: ${payload.targetLabel} - avoid interacting while the operator is working`
     : target
-      ? 'Target located on the current page'
-      : 'Working from the current page context'
+      ? 'Target located on the current page - avoid interacting while the operator is working'
+      : 'Working from the current page context - avoid interacting while the operator is working'
 
   if (target) {
     const rect = target.getBoundingClientRect()
     const padding = 8
+    const cursorX = rect.left + Math.max(rect.width / 2, 14)
+    const cursorY = rect.top + Math.max(Math.min(rect.height / 2, 22), 14)
     ring.style.left = `${Math.max(rect.left - padding, 6)}px`
     ring.style.top = `${Math.max(rect.top - padding, 6)}px`
     ring.style.width = `${Math.max(rect.width + padding * 2, 44)}px`
     ring.style.height = `${Math.max(rect.height + padding * 2, 44)}px`
     ring.classList.remove('hidden')
+    cursor.style.left = `${Math.min(Math.max(cursorX, 16), window.innerWidth - 16)}px`
+    cursor.style.top = `${Math.min(Math.max(cursorY, 16), window.innerHeight - 16)}px`
+    cursor.classList.remove('hidden')
 
     const badgeTop = rect.top > 92 ? rect.top - 78 : rect.bottom + 12
     const badgeLeft = Math.min(Math.max(rect.left, 8), window.innerWidth - 320)
@@ -203,6 +276,9 @@ function renderOverlay(payload: OverlayPayload) {
     badge.hidden = false
   } else {
     ring.classList.add('hidden')
+    cursor.style.left = `${Math.min(window.innerWidth - 28, 72)}px`
+    cursor.style.top = '72px'
+    cursor.classList.remove('hidden')
     badge.style.left = '12px'
     badge.style.top = '12px'
     badge.hidden = false

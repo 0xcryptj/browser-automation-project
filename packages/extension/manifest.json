@@ -5,6 +5,7 @@
   "description": "Local-first AI browser automation - runs entirely on localhost.",
   "permissions": [
     "activeTab",
+    "nativeMessaging",
     "scripting",
     "sidePanel",
     "storage",

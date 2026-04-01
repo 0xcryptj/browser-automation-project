@@ -171,6 +171,7 @@ async function findBestTargetLocator(
   const candidates = [
     ...(fallbackSelector ? buildSelectorLocators(page, fallbackSelector) : []),
     ...buildSemanticLocators(page, target.element, action),
+    ...buildIntentLocators(page, action, context),
   ]
 
   if (candidates.length === 0) {
@@ -245,6 +246,38 @@ function buildSemanticLocators(
   }
   if (textLabel && (element.kind === 'button' || element.kind === 'link' || element.kind === 'actionable')) {
     locators.push(page.getByText(textLabel, { exact: false }).first())
+  }
+
+  return locators
+}
+
+function buildIntentLocators(page: Page, action: Action, context?: TaskContext) {
+  const locators: Locator[] = []
+  const intentPhrases = inferIntentPhrases(action)
+  const snapshotMatches = matchSnapshotElements(context?.snapshot, intentPhrases)
+
+  for (const phrase of intentPhrases) {
+    if (action.type === 'click' || action.type === 'hover') {
+      locators.push(page.getByRole('button', { name: phrase, exact: false }).first())
+      locators.push(page.getByRole('link', { name: phrase, exact: false }).first())
+      locators.push(page.getByText(phrase, { exact: false }).first())
+    }
+
+    if (action.type === 'type' || action.type === 'select') {
+      locators.push(page.getByLabel(phrase, { exact: false }).first())
+      locators.push(page.getByPlaceholder(phrase, { exact: false }).first())
+      locators.push(page.getByRole('textbox', { name: phrase, exact: false }).first())
+      locators.push(page.locator(`input[name="${escapeCssValue(phrase)}"]`).first())
+      locators.push(page.locator(`textarea[name="${escapeCssValue(phrase)}"]`).first())
+      locators.push(page.locator(`select[name="${escapeCssValue(phrase)}"]`).first())
+    }
+  }
+
+  for (const match of snapshotMatches) {
+    locators.push(...buildSemanticLocators(page, match, action))
+    if (match.selector) {
+      locators.push(...buildSelectorLocators(page, match.selector))
+    }
   }
 
   return locators
@@ -468,4 +501,58 @@ function escapeCssValue(value: string) {
 
 function firstNonEmpty(...values: Array<string | undefined>) {
   return values.find((value) => value?.trim())
+}
+
+function inferIntentPhrases(action: Action) {
+  const candidates = new Set<string>()
+  const push = (value?: string | null) => {
+    if (!value) return
+    const normalized = value.trim().replace(/^["']|["']$/g, '')
+    if (!normalized) return
+    if (normalized.length > 80) return
+    candidates.add(normalized)
+  }
+
+  push(action.value)
+
+  const description = action.description?.trim()
+  if (description) {
+    push(description)
+    const matchers = [
+      /click\s+(?:on\s+)?["']?([^"']+?)["']?$/i,
+      /hover\s+(?:over\s+)?["']?([^"']+?)["']?$/i,
+      /type\s+["'][^"']+["']\s+(?:into|in)\s+["']?([^"']+?)["']?$/i,
+      /select\s+["'][^"']+["']\s+(?:from|in)\s+["']?([^"']+?)["']?$/i,
+      /press\s+[^ ]+\s+on\s+["']?([^"']+?)["']?$/i,
+      /(?:open|choose|tap)\s+["']?([^"']+?)["']?$/i,
+    ]
+    for (const matcher of matchers) {
+      const match = description.match(matcher)
+      if (match?.[1]) push(match[1])
+    }
+  }
+
+  return Array.from(candidates)
+}
+
+function matchSnapshotElements(snapshot: CompactPageSnapshot | undefined, phrases: string[]) {
+  if (!snapshot || phrases.length === 0) return []
+  const normalizedPhrases = phrases.map((phrase) => normalizeIntent(phrase)).filter(Boolean)
+  const matches = [
+    ...snapshot.elements,
+    ...snapshot.forms.flatMap((form) => form.fields),
+  ].filter((element) => {
+    const haystack = normalizeIntent(
+      [element.label, element.name, element.placeholder, 'text' in element ? element.text : undefined, element.href, element.selector]
+        .filter(Boolean)
+        .join(' ')
+    )
+    return normalizedPhrases.some((phrase) => haystack.includes(phrase))
+  })
+
+  return matches.slice(0, 6)
+}
+
+function normalizeIntent(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }

@@ -7,6 +7,7 @@ import { TaskInput } from './components/TaskInput.js'
 import { LiveTaskView } from './components/LiveTaskView.js'
 import { ApprovalModal } from './components/ApprovalModal.js'
 import { StatusBadge } from './components/StatusBadge.js'
+import { FutureLoginScreen } from './components/FutureLoginScreen.js'
 import { AssistPanel } from './panels/AssistPanel.js'
 import { TaskHistory } from './panels/TaskHistory.js'
 import { SettingsPanel } from './panels/SettingsPanel.js'
@@ -31,6 +32,7 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [runnerStatus, setRunnerStatus] = useState<RunnerStatus>('checking')
   const [runnerUrl, setRunnerUrl] = useState('http://localhost:3000')
+  const [runnerHealth, setRunnerHealth] = useState<Awaited<ReturnType<typeof runnerClient.health>> | null>(null)
   const [runnerDetails, setRunnerDetails] = useState<string | null>(null)
   const [runnerWarning, setRunnerWarning] = useState<string | null>(null)
   const [extensionSettings, setExtensionSettings] = useState<ExtensionSettings | null>(null)
@@ -38,8 +40,12 @@ export default function App() {
   const [observeLoading, setObserveLoading] = useState(false)
   const [pageAccessMessage, setPageAccessMessage] = useState<string | null>(null)
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>('dark')
+  const [runnerStarting, setRunnerStarting] = useState(false)
+  const [launcherError, setLauncherError] = useState<string | null>(null)
+  const [launcherHelperCommand, setLauncherHelperCommand] = useState<string | null>(null)
   const { state, submitTask, approve, cancel, reset, retryStream } = useTaskStream()
   const prevStatus = useRef(state.status)
+  const attemptedAutoStart = useRef(false)
 
   const resolvedTheme: ResolvedTheme = useMemo(() => {
     if (extensionSettings?.theme === 'light') return 'light'
@@ -56,19 +62,37 @@ export default function App() {
       setRunnerUrl(baseUrl)
 
       const health = await runnerClient.health()
+      setRunnerHealth(health)
       setRunnerStatus(health.status === 'ok' ? 'connected' : 'disconnected')
       setRunnerWarning(health.browserTarget?.warning ?? health.planner.warning ?? null)
-      setRunnerDetails(
-        health.browser?.browserConnected
-          ? `${health.planner.provider}/${health.planner.model ?? 'default'} · ${health.browserTarget?.mode ?? 'launch'}${health.browser.activePageUrl ? ` on ${safeHostname(health.browser.activePageUrl)}` : ''}`
-          : `${health.planner.provider}/${health.planner.model ?? 'default'} · ${health.browserTarget?.mode ?? 'launch'}`
-      )
+      setLauncherError(null)
+      setLauncherHelperCommand(null)
+      setRunnerDetails(formatRunnerDetails(health))
     } catch {
+      setRunnerHealth(null)
       setRunnerStatus('disconnected')
       setRunnerDetails(null)
       setRunnerWarning(null)
     }
   }, [])
+
+  const ensureLocalRunner = useCallback(async () => {
+    setRunnerStarting(true)
+    setLauncherError(null)
+
+    const result = await runnerClient.ensureRunner()
+    if (!result.ok) {
+      setRunnerStatus('disconnected')
+      setLauncherError(result.error)
+      setLauncherHelperCommand(result.helperCommand ?? null)
+      setRunnerStarting(false)
+      return false
+    }
+
+    await checkRunner()
+    setRunnerStarting(false)
+    return true
+  }, [checkRunner])
 
   useEffect(() => {
     void getSettings().then(setExtensionSettings)
@@ -88,6 +112,15 @@ export default function App() {
     }, 20_000)
     return () => clearInterval(id)
   }, [checkRunner])
+
+  useEffect(() => {
+    if (runnerStatus !== 'disconnected' || attemptedAutoStart.current) {
+      return
+    }
+
+    attemptedAutoStart.current = true
+    void ensureLocalRunner()
+  }, [ensureLocalRunner, runnerStatus])
 
   useEffect(() => {
     const prev = prevStatus.current
@@ -155,7 +188,20 @@ export default function App() {
 
   const handleSubmit = useCallback(
     async (prompt: string) => {
-      if (runnerStatus !== 'connected') return
+      if (runnerStatus !== 'connected') {
+        const booted = await ensureLocalRunner()
+        if (!booted) return
+      }
+
+      if (runnerHealth?.browserTarget?.mode === 'attach' && !runnerHealth.browserTarget.ready) {
+        setLauncherError(
+          runnerHealth.browserTarget.warning ??
+            'Attach mode is enabled, but the native browser is not reachable yet.'
+        )
+        setTab('settings')
+        setMenuOpen(false)
+        return
+      }
 
       setTab('tasks')
       setMenuOpen(false)
@@ -176,7 +222,7 @@ export default function App() {
 
       await submitTask(prompt, observation, extensionSettings?.defaultMode ?? 'standard')
     },
-    [collectPage, extensionSettings?.defaultMode, runnerStatus, submitTask]
+    [collectPage, ensureLocalRunner, extensionSettings?.defaultMode, runnerHealth, runnerStatus, submitTask]
   )
 
   const handleRerun = useCallback(
@@ -207,8 +253,16 @@ export default function App() {
   const themeVars = resolvedTheme === 'light' ? lightThemeVars : darkThemeVars
   const currentTabMeta = NAV_ITEMS.find((item) => item.id === tab) ?? NAV_ITEMS[0]
   const topBanner = runnerStatus === 'disconnected'
-    ? `Runner offline at ${runnerUrl}. Start it with pnpm runner:dev.`
+    ? null
     : runnerWarning ?? pageAccessMessage
+  const orbState =
+    runnerStatus !== 'connected'
+      ? 'offline'
+      : runnerHealth?.browserTarget?.mode === 'attach' && runnerHealth.browserTarget.ready
+        ? 'attached'
+        : runnerWarning
+          ? 'warning'
+          : 'online'
 
   return (
     <div
@@ -221,18 +275,35 @@ export default function App() {
         background: 'var(--bg)',
         color: 'var(--text)',
         fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, sans-serif',
+        position: 'relative',
       }}
     >
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          overflow: 'hidden',
+          pointerEvents: 'none',
+        }}
+      >
+        <div style={auroraStyle('radial-gradient(circle at 30% 20%, rgba(88,132,255,0.24), rgba(88,132,255,0.02) 55%, transparent 72%)', -44, -30, 180, 180)} />
+        <div style={auroraStyle('radial-gradient(circle at 70% 10%, rgba(110,231,255,0.14), rgba(110,231,255,0.02) 50%, transparent 70%)', 170, -24, 170, 170)} />
+        <div style={auroraStyle('radial-gradient(circle at 50% 50%, rgba(255,255,255,0.08), rgba(255,255,255,0.01) 55%, transparent 72%)', 60, 330, 220, 220)} />
+      </div>
+
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '12px 14px',
-          borderBottom: '1px solid var(--border)',
+          borderBottom: '1px solid var(--glass-border)',
           flexShrink: 0,
           background: 'var(--header-bg)',
-          backdropFilter: 'blur(12px)',
+          backdropFilter: 'blur(22px) saturate(1.28)',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.12)',
+          position: 'relative',
+          zIndex: 1,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -241,15 +312,14 @@ export default function App() {
               width: 14,
               height: 14,
               borderRadius: '50%',
-              background: 'radial-gradient(circle at 35% 35%, #bfdbfe, #2563eb 62%, #0f172a)',
-              boxShadow: '0 0 0 6px rgba(37,99,235,0.10)',
+              ...getOrbStyle(orbState),
               flexShrink: 0,
             }}
           />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em' }}>Browser Operator</div>
             <div style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {currentTabMeta.label} · {currentTabMeta.description}
+              {`${currentTabMeta.label} - ${currentTabMeta.description}`}
             </div>
           </div>
         </div>
@@ -280,15 +350,43 @@ export default function App() {
       </div>
 
       {runnerStatus === 'connected' && runnerDetails && (
-        <div
-          style={{
-            padding: '8px 14px 0',
-            fontSize: 11,
-            color: 'var(--muted)',
-            flexShrink: 0,
-          }}
-        >
-          {runnerDetails}
+        <div style={{ padding: '8px 14px 0', flexShrink: 0 }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '7px 10px',
+              borderRadius: 999,
+              background: 'var(--glass-button)',
+              border: '1px solid var(--glass-border)',
+              backdropFilter: 'blur(16px) saturate(1.18)',
+              boxShadow: 'var(--glass-shadow-soft)',
+              fontSize: 11,
+              color: 'var(--muted)',
+            }}
+          >
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background:
+                  orbState === 'attached'
+                    ? '#34d399'
+                    : orbState === 'warning'
+                      ? '#fbbf24'
+                      : '#60a5fa',
+                boxShadow:
+                  orbState === 'attached'
+                    ? '0 0 0 4px rgba(52,211,153,0.12)'
+                    : orbState === 'warning'
+                      ? '0 0 0 4px rgba(251,191,36,0.12)'
+                      : '0 0 0 4px rgba(96,165,250,0.12)',
+              }}
+            />
+            {runnerDetails}
+          </div>
         </div>
       )}
 
@@ -303,6 +401,7 @@ export default function App() {
           flex: 1,
           overflow: 'hidden',
           position: 'relative',
+          zIndex: 1,
         }}
       >
         {menuOpen && (
@@ -324,17 +423,18 @@ export default function App() {
                 width: 280,
                 maxWidth: 'calc(100% - 20px)',
                 background: 'var(--panel)',
-                border: '1px solid var(--border)',
+                border: '1px solid var(--glass-border)',
                 borderRadius: 20,
                 boxShadow: 'var(--shadow)',
                 zIndex: 21,
                 overflow: 'hidden',
+                backdropFilter: 'blur(22px) saturate(1.28)',
               }}
             >
               <div style={{ padding: 14, borderBottom: '1px solid var(--border)' }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Menu</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                  Theme: {extensionSettings?.theme ?? 'system'} · Browser: {runnerDetails ?? 'checking...'}
+                  {`Theme: ${extensionSettings?.theme ?? 'system'} - Browser: ${runnerDetails ?? 'checking...'}`}
                 </div>
               </div>
 
@@ -405,6 +505,16 @@ export default function App() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
                 {hasResult && <LiveTaskView state={state} />}
 
+                {(runnerStatus !== 'connected' || runnerStarting || launcherError) && (
+                  <ConnectionCard
+                    runnerUrl={runnerUrl}
+                    runnerStarting={runnerStarting}
+                    launcherError={launcherError}
+                    helperCommand={launcherHelperCommand}
+                    onStart={() => void ensureLocalRunner()}
+                  />
+                )}
+
                 {state.status === 'error' && state.taskId && (
                   <button onClick={() => void retryStream()} style={secondaryButtonStyle}>
                     Retry stream
@@ -417,19 +527,50 @@ export default function App() {
                   </button>
                 )}
 
-                {!hasResult && (
+                {!hasResult && runnerStatus === 'connected' && (
                   <div
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 8,
-                      paddingTop: 2,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 18,
+                      padding: '36px 10px 18px',
+                      minHeight: 320,
                     }}
                   >
-                    <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Try one of these</div>
-                    {[
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 12,
+                        textAlign: 'center',
+                        maxWidth: 320,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 64,
+                          height: 64,
+                          borderRadius: '50%',
+                          background: 'radial-gradient(circle at 35% 35%, rgba(255,255,255,0.9), rgba(115,168,255,0.84) 38%, rgba(32,77,187,0.78) 66%, rgba(7,18,41,0.82))',
+                          boxShadow: '0 0 0 14px rgba(116,173,255,0.10), 0 18px 40px rgba(24,72,191,0.18)',
+                        }}
+                      />
+                      <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.03em' }}>
+                        Ask anything
+                      </div>
+                      <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--muted)' }}>
+                        Read the page, click through flows, fill visible forms, or ask for a summary while the operator works in your browser.
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                      {[
                       'Go to example.com',
                       'Extract the main heading',
+                      'Tell me what I am viewing',
                       'Search for TypeScript on google.com',
                       'Take a screenshot of this page',
                     ].map((examplePrompt) => (
@@ -439,19 +580,21 @@ export default function App() {
                         disabled={isRunning || runnerStatus !== 'connected'}
                         style={{
                           background: 'var(--panel)',
-                          border: '1px solid var(--border)',
-                          borderRadius: 14,
+                          border: '1px solid var(--glass-border)',
+                          borderRadius: 999,
                           color: 'var(--text-soft)',
                           fontSize: 12,
-                          padding: '11px 12px',
+                          padding: '9px 12px',
                           cursor: isRunning || runnerStatus !== 'connected' ? 'not-allowed' : 'pointer',
                           textAlign: 'left',
-                          boxShadow: 'var(--shadow-soft)',
+                          boxShadow: 'var(--glass-shadow-soft)',
+                          backdropFilter: 'blur(16px) saturate(1.2)',
                         }}
                       >
                         {examplePrompt}
                       </button>
                     ))}
+                  </div>
                   </div>
                 )}
               </div>
@@ -462,8 +605,8 @@ export default function App() {
                   bottom: -14,
                   margin: '0 -14px -14px',
                   padding: '14px',
-                  background: 'linear-gradient(180deg, transparent 0%, var(--bg) 16%, var(--bg) 100%)',
-                  backdropFilter: 'blur(12px)',
+                  background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, color-mix(in srgb, var(--bg) 78%, transparent) 18%, var(--bg) 100%)',
+                  backdropFilter: 'blur(18px)',
                 }}
               >
                 <TaskInput onSubmit={handleSubmit} disabled={isRunning || runnerStatus !== 'connected'} />
@@ -484,10 +627,13 @@ export default function App() {
           {tab === 'history' && <TaskHistory onRerun={handleRerun} />}
 
           {tab === 'settings' && (
-            <SettingsPanel
-              settings={extensionSettings}
-              onSettingsChange={setExtensionSettings}
-            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <FutureLoginScreen />
+              <SettingsPanel
+                settings={extensionSettings}
+                onSettingsChange={setExtensionSettings}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -516,6 +662,116 @@ export default function App() {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 999px; }
       `}</style>
+    </div>
+  )
+}
+
+function ConnectionCard({
+  runnerUrl,
+  runnerStarting,
+  launcherError,
+  helperCommand,
+  onStart,
+}: {
+  runnerUrl: string
+  runnerStarting: boolean
+  launcherError: string | null
+  helperCommand: string | null
+  onStart: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+
+  const copyCommand = async () => {
+    if (!helperCommand) return
+    try {
+      await navigator.clipboard.writeText(helperCommand)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1400)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        padding: 16,
+        background: 'var(--panel)',
+        border: '1px solid var(--border)',
+        borderRadius: 20,
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: 'radial-gradient(circle at 35% 35%, #bfdbfe, #2563eb 58%, #0f172a)',
+            boxShadow: '0 0 0 8px rgba(37,99,235,0.08)',
+            flexShrink: 0,
+          }}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+            {runnerStarting ? 'Starting your local operator' : 'Your local operator is offline'}
+          </div>
+          <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--muted)' }}>
+            {runnerStarting
+              ? `Launching the local runner at ${runnerUrl}.`
+              : `The extension is set to use ${runnerUrl}. Once the companion is installed, startup can happen automatically.`}
+          </div>
+        </div>
+      </div>
+
+      {launcherError && (
+        <div
+          style={{
+            fontSize: 12,
+            lineHeight: 1.55,
+            color: 'var(--warning)',
+            background: 'var(--warning-bg)',
+            border: '1px solid var(--warning-border)',
+            borderRadius: 14,
+            padding: '10px 12px',
+          }}
+        >
+          {launcherError}
+        </div>
+      )}
+
+      {helperCommand && (
+        <div
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+            padding: '11px 12px',
+            fontSize: 11,
+            color: 'var(--text-soft)',
+            lineHeight: 1.55,
+            wordBreak: 'break-word',
+          }}
+        >
+          <div style={{ marginBottom: 8, color: 'var(--muted)' }}>One-time setup command</div>
+          <code>{helperCommand}</code>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={onStart} disabled={runnerStarting} style={primaryPillStyle}>
+          {runnerStarting ? 'Starting...' : 'Start local operator'}
+        </button>
+        {helperCommand && (
+          <button onClick={() => void copyCommand()} style={secondaryButtonStyle}>
+            {copied ? 'Copied' : 'Copy setup command'}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -592,72 +848,153 @@ const menuButtonStyle: CSSProperties = {
   justifyContent: 'center',
   width: 34,
   height: 34,
-  background: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 12,
+  background: 'var(--glass-button)',
+  border: '1px solid var(--glass-border)',
+  borderRadius: 14,
   color: 'var(--text)',
   cursor: 'pointer',
+  backdropFilter: 'blur(18px) saturate(1.25)',
+  boxShadow: 'var(--glass-shadow-soft)',
 }
 
 const secondaryButtonStyle: CSSProperties = {
   alignSelf: 'flex-start',
-  background: 'var(--panel)',
-  border: '1px solid var(--border)',
+  background: 'var(--glass-button)',
+  border: '1px solid var(--glass-border)',
   borderRadius: 999,
   color: 'var(--text)',
   fontSize: 11,
   padding: '8px 12px',
   cursor: 'pointer',
+  backdropFilter: 'blur(18px) saturate(1.2)',
+  boxShadow: 'var(--glass-shadow-soft)',
+}
+
+const primaryPillStyle: CSSProperties = {
+  background: 'var(--button-grad)',
+  border: '1px solid rgba(255,255,255,0.22)',
+  borderRadius: 999,
+  color: '#ffffff',
+  fontSize: 12,
+  fontWeight: 600,
+  padding: '9px 14px',
+  cursor: 'pointer',
+  boxShadow: '0 14px 30px rgba(49,102,255,0.22), inset 0 1px 0 rgba(255,255,255,0.28)',
+  backdropFilter: 'blur(18px) saturate(1.25)',
 }
 
 const dangerButtonStyle: CSSProperties = {
-  background: 'transparent',
+  background: 'color-mix(in srgb, var(--panel) 62%, transparent)',
   border: '1px solid var(--danger-border)',
   borderRadius: 999,
   color: 'var(--danger)',
   fontSize: 11,
   padding: '5px 10px',
   cursor: 'pointer',
+  backdropFilter: 'blur(14px)',
 }
 
 const darkThemeVars: CSSProperties = {
-  ['--bg' as string]: '#0b0d10',
-  ['--header-bg' as string]: 'rgba(11,13,16,0.94)',
-  ['--panel' as string]: '#111317',
-  ['--panel-soft' as string]: '#141920',
-  ['--surface' as string]: '#0f1216',
-  ['--border' as string]: '#1f252d',
+  ['--bg' as string]: 'linear-gradient(180deg, rgb(9 12 20) 0%, rgb(10 15 24) 48%, rgb(7 10 18) 100%)',
+  ['--header-bg' as string]: 'linear-gradient(180deg, rgba(14,20,33,0.76), rgba(13,17,28,0.62))',
+  ['--panel' as string]: 'linear-gradient(180deg, rgba(24,31,46,0.62), rgba(14,18,27,0.48))',
+  ['--panel-soft' as string]: 'linear-gradient(180deg, rgba(35,45,67,0.48), rgba(18,22,35,0.34))',
+  ['--surface' as string]: 'linear-gradient(180deg, rgba(17,22,34,0.72), rgba(11,15,24,0.62))',
+  ['--border' as string]: 'rgba(132,149,196,0.16)',
+  ['--glass-border' as string]: 'rgba(255,255,255,0.12)',
+  ['--glass-button' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))',
+  ['--button-grad' as string]: 'linear-gradient(180deg, rgba(115,168,255,0.95), rgba(60,120,255,0.78))',
   ['--text' as string]: '#eef2f7',
   ['--text-soft' as string]: '#cbd5e1',
   ['--muted' as string]: '#7b8794',
-  ['--shadow' as string]: '0 18px 44px rgba(0,0,0,0.28)',
-  ['--shadow-soft' as string]: '0 10px 24px rgba(0,0,0,0.14)',
+  ['--shadow' as string]: '0 24px 60px rgba(0,0,0,0.24)',
+  ['--shadow-soft' as string]: '0 16px 38px rgba(0,0,0,0.14)',
+  ['--glass-shadow-soft' as string]: '0 10px 28px rgba(0,0,0,0.12)',
   ['--scrollbar' as string]: '#1f242c',
   ['--danger' as string]: '#f87171',
-  ['--danger-bg' as string]: '#140809',
+  ['--danger-bg' as string]: 'rgba(92,16,24,0.28)',
   ['--danger-border' as string]: '#3c191b',
   ['--warning' as string]: '#fbbf24',
-  ['--warning-bg' as string]: '#171102',
+  ['--warning-bg' as string]: 'rgba(86,62,12,0.24)',
   ['--warning-border' as string]: '#3f3110',
 }
 
 const lightThemeVars: CSSProperties = {
-  ['--bg' as string]: '#f5f7fb',
-  ['--header-bg' as string]: 'rgba(245,247,251,0.94)',
-  ['--panel' as string]: '#ffffff',
-  ['--panel-soft' as string]: '#f3f6fb',
-  ['--surface' as string]: '#f8fafc',
-  ['--border' as string]: '#d8e0ea',
+  ['--bg' as string]: 'linear-gradient(180deg, rgb(243 247 255) 0%, rgb(238 244 252) 42%, rgb(245 248 255) 100%)',
+  ['--header-bg' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.75), rgba(246,249,255,0.68))',
+  ['--panel' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.82), rgba(247,250,255,0.64))',
+  ['--panel-soft' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.78), rgba(238,244,255,0.6))',
+  ['--surface' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.76), rgba(244,248,255,0.68))',
+  ['--border' as string]: 'rgba(148,163,184,0.18)',
+  ['--glass-border' as string]: 'rgba(255,255,255,0.56)',
+  ['--glass-button' as string]: 'linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.42))',
+  ['--button-grad' as string]: 'linear-gradient(180deg, rgba(126,177,255,0.92), rgba(75,128,255,0.76))',
   ['--text' as string]: '#0f172a',
   ['--text-soft' as string]: '#334155',
   ['--muted' as string]: '#64748b',
-  ['--shadow' as string]: '0 18px 44px rgba(15,23,42,0.10)',
-  ['--shadow-soft' as string]: '0 10px 24px rgba(15,23,42,0.06)',
+  ['--shadow' as string]: '0 24px 54px rgba(15,23,42,0.10)',
+  ['--shadow-soft' as string]: '0 16px 34px rgba(15,23,42,0.07)',
+  ['--glass-shadow-soft' as string]: '0 10px 22px rgba(15,23,42,0.05)',
   ['--scrollbar' as string]: '#c9d4e1',
   ['--danger' as string]: '#dc2626',
-  ['--danger-bg' as string]: '#fff1f2',
+  ['--danger-bg' as string]: 'rgba(255,241,242,0.78)',
   ['--danger-border' as string]: '#fecdd3',
   ['--warning' as string]: '#b45309',
-  ['--warning-bg' as string]: '#fffbeb',
+  ['--warning-bg' as string]: 'rgba(255,251,235,0.84)',
   ['--warning-border' as string]: '#fde68a',
+}
+
+function auroraStyle(background: string, left: number, top: number, width: number, height: number): CSSProperties {
+  return {
+    position: 'absolute',
+    left,
+    top,
+    width,
+    height,
+    borderRadius: '50%',
+    background,
+    filter: 'blur(28px)',
+    opacity: 0.9,
+  }
+}
+
+function getOrbStyle(state: 'offline' | 'warning' | 'online' | 'attached'): CSSProperties {
+  if (state === 'attached') {
+    return {
+      background: 'radial-gradient(circle at 35% 35%, #d1fae5, #34d399 58%, #064e3b)',
+      boxShadow: '0 0 0 6px rgba(52,211,153,0.12), 0 10px 24px rgba(16,185,129,0.18)',
+    }
+  }
+
+  if (state === 'warning') {
+    return {
+      background: 'radial-gradient(circle at 35% 35%, #fef3c7, #f59e0b 58%, #78350f)',
+      boxShadow: '0 0 0 6px rgba(245,158,11,0.12), 0 10px 24px rgba(245,158,11,0.18)',
+    }
+  }
+
+  if (state === 'offline') {
+    return {
+      background: 'radial-gradient(circle at 35% 35%, #fecaca, #f87171 58%, #7f1d1d)',
+      boxShadow: '0 0 0 6px rgba(248,113,113,0.10), 0 10px 24px rgba(127,29,29,0.16)',
+    }
+  }
+
+  return {
+    background: 'radial-gradient(circle at 35% 35%, #bfdbfe, #2563eb 62%, #0f172a)',
+    boxShadow: '0 0 0 6px rgba(37,99,235,0.10), 0 10px 24px rgba(37,99,235,0.16)',
+  }
+}
+
+function formatRunnerDetails(health: Awaited<ReturnType<typeof runnerClient.health>>) {
+  const browserState =
+    health.browserTarget?.mode === 'attach'
+      ? health.browserTarget.ready
+        ? 'Attached browser ready'
+        : 'Attach waiting'
+      : 'Launching isolated browser'
+  const base = `${health.planner.provider}/${health.planner.model ?? 'default'} - ${browserState}`
+  return health.browser?.browserConnected && health.browser.activePageUrl
+    ? `${base} on ${safeHostname(health.browser.activePageUrl)}`
+    : base
 }

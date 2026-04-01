@@ -48,10 +48,23 @@ export async function assistRoutes(server: FastifyInstance) {
 }
 
 function buildPageContent(obs: typeof PageObservation._type): string {
+  const snapshot = obs.snapshot
+  const actionable = snapshot?.elements
+    .filter((element) => element.actionable)
+    .slice(0, 12)
+    .map((element) => `${element.ref}: ${element.label ?? element.text ?? element.selector}`)
+    .join(' | ')
+  const forms = snapshot?.forms
+    .slice(0, 6)
+    .map((form) => `${form.ref}: ${form.fields.map((field) => field.label ?? field.name ?? field.selector).slice(0, 6).join(', ')}`)
+    .join(' | ')
   const lines = [
     `URL: ${obs.url}`,
     `Title: ${obs.title}`,
     obs.headings?.length ? `Headings: ${obs.headings.join(' | ')}` : '',
+    snapshot?.summary ? `Snapshot: ${snapshot.summary}` : '',
+    actionable ? `Actionable elements: ${actionable}` : '',
+    forms ? `Forms: ${forms}` : '',
     obs.text ? `\nPage text:\n${obs.text.slice(0, 6000)}` : '',
   ]
   return lines.filter(Boolean).join('\n')
@@ -167,13 +180,50 @@ function mockExtraction(obs: typeof PageObservation._type): ImportantInfoExtract
     'years of experience',
   ].filter((signal) => text.includes(signal))
   const isJobApplicationPage = jobApplicationSignals.length >= 2
+  const actionables = obs.snapshot?.elements
+    .filter((element) => element.actionable)
+    .map((element) => element.label ?? element.text ?? element.selector)
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 8) ?? []
+  const formHints = obs.snapshot?.forms
+    .flatMap((form) => form.fields.map((field) => field.label ?? field.name ?? field.selector))
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 8) ?? []
+  const callsToAction = actionables.filter((label) =>
+    /\b(apply|continue|next|submit|sign in|log in|book|start|get started|contact)\b/i.test(label)
+  )
+  const warnings = [
+    ...(dates.length > 0 ? ['This page contains time-sensitive dates.'] : []),
+    ...(isJobApplicationPage ? ['This looks like a job application flow, so double-check details before submitting anything.'] : []),
+  ]
+  const nextActions = [
+    ...(callsToAction.length > 0 ? [`Review the visible action before clicking: ${callsToAction[0]}`] : []),
+    ...(formHints.length > 0 ? [`Prepare the visible form fields: ${formHints.slice(0, 3).join(', ')}`] : []),
+    ...(dates[0] ? [`Note the next important date on the page: ${dates[0]}`] : []),
+  ]
+  const requiredMaterials = [
+    ...new Set(
+      ['resume', 'cover letter', 'portfolio', 'linkedin', 'github']
+        .filter((signal) => text.includes(signal))
+        .map((signal) => signal.charAt(0).toUpperCase() + signal.slice(1))
+    ),
+  ]
   return {
     ...emptyExtraction(),
     pageCategory: isJobApplicationPage ? 'job_application' : dates.length > 0 ? 'deadline' : 'general',
     isJobApplicationPage,
     jobApplicationSignals,
     deadlines: dates.map((d) => ({ label: 'Date found', rawText: d })),
-    summary: `Mock extraction from ${obs.title}. Configure OpenAI, Anthropic, or Ollama in Settings for AI-powered extraction.`,
+    warnings,
+    nextActions,
+    requiredMaterials,
+    callsToAction,
+    summary:
+      isJobApplicationPage
+        ? `This page appears to be a job application flow. Review the requirements, note any deadlines, and prepare the visible materials before taking the next action.`
+        : dates.length > 0
+          ? `This page includes actionable timing information. Review the listed dates and the visible calls to action before moving forward.`
+          : `This page appears informational. Review the summary content and any visible actions before proceeding.`,
     rawUrl: obs.url,
     extractedAt: Date.now(),
   }

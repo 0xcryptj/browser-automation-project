@@ -26,11 +26,13 @@ export function StatusBadge({ status }: { status: StepStatus | string }) {
         fontSize: 11,
         fontWeight: 500,
         color: 'var(--text)',
-        background: 'var(--panel)',
-        border: '1px solid var(--border)',
+        background: 'var(--glass-button)',
+        border: '1px solid var(--glass-border)',
         borderRadius: 999,
         padding: '4px 9px',
         letterSpacing: '-0.01em',
+        backdropFilter: 'blur(18px) saturate(1.25)',
+        boxShadow: 'var(--glass-shadow-soft)',
       }}
     >
       <span

@@ -42,6 +42,7 @@ export function SettingsPanel({
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<SettingsTab>('runner')
   const [loadingPlanner, setLoadingPlanner] = useState(true)
+  const [recoveringBrowser, setRecoveringBrowser] = useState<'brave' | 'chrome' | null>(null)
 
   useEffect(() => {
     if (settingsProp) setSettings(settingsProp)
@@ -111,6 +112,28 @@ export function SettingsPanel({
       flashSaved('Browser target saved')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Browser settings save failed.')
+    }
+  }
+
+  async function handleBrowserAttachRecovery(browser: 'brave' | 'chrome') {
+    setRecoveringBrowser(browser)
+    try {
+      const result = await runnerClient.ensureBrowserAttach(browser, browserDraft.cdpUrl)
+      if (!result.ok) {
+        throw new Error(result.error)
+      }
+
+      await loadBrowserSettings()
+      flashSaved(
+        result.launched
+          ? `${capitalize(browser)} restarted with attach mode`
+          : `${capitalize(browser)} attach mode is ready`
+      )
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Could not restart ${browser} for attach mode.`)
+    } finally {
+      setRecoveringBrowser(null)
     }
   }
 
@@ -279,6 +302,12 @@ export function SettingsPanel({
             </InfoPanel>
           )}
 
+          {browserDraft.mode === 'attach' && !browserSettings?.ready && (
+            <Callout tone="warning">
+              Attach mode needs Brave or Chrome running with remote debugging enabled. Use a quick restart below to reopen the browser with <code style={inlineCodeStyle}>--remote-debugging-port=9222</code>.
+            </Callout>
+          )}
+
           <div style={buttonRowStyle}>
             <button onClick={() => void handleBrowserSave()} style={secondaryButtonStyle}>
               Save Browser Target
@@ -286,6 +315,24 @@ export function SettingsPanel({
             <button onClick={() => void loadBrowserSettings()} style={secondaryButtonStyle}>
               Refresh Browser Status
             </button>
+            {browserDraft.mode === 'attach' && (
+              <>
+                <button
+                  onClick={() => void handleBrowserAttachRecovery('brave')}
+                  style={primaryButtonStyle}
+                  disabled={recoveringBrowser !== null}
+                >
+                  {recoveringBrowser === 'brave' ? 'Restarting Brave...' : 'Restart Brave for Attach'}
+                </button>
+                <button
+                  onClick={() => void handleBrowserAttachRecovery('chrome')}
+                  style={secondaryButtonStyle}
+                  disabled={recoveringBrowser !== null}
+                >
+                  {recoveringBrowser === 'chrome' ? 'Restarting Chrome...' : 'Restart Chrome for Attach'}
+                </button>
+              </>
+            )}
             <button onClick={() => void handleSettingsSave()} style={primaryButtonStyle}>
               Save App Settings
             </button>
@@ -629,4 +676,13 @@ const secondaryButtonStyle: CSSProperties = {
   fontWeight: 600,
   padding: '9px 14px',
   cursor: 'pointer',
+}
+
+const inlineCodeStyle: CSSProperties = {
+  background: 'rgba(255,255,255,0.06)',
+  border: '1px solid var(--glass-border)',
+  borderRadius: 8,
+  padding: '2px 6px',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 11,
 }

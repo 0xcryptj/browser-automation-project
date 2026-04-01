@@ -38,10 +38,11 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
           width: '100%',
           maxWidth: 420,
           background: 'var(--panel)',
-          border: '1px solid var(--border)',
-          borderRadius: 22,
+          border: '1px solid var(--glass-border)',
+          borderRadius: 24,
           boxShadow: 'var(--shadow)',
           overflow: 'hidden',
+          backdropFilter: 'blur(26px) saturate(1.24)',
         }}
       >
         <div
@@ -78,8 +79,8 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
               alignSelf: 'flex-start',
               padding: '5px 9px',
               borderRadius: 999,
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
+              background: 'var(--glass-button)',
+              border: '1px solid var(--glass-border)',
               color: cfg.color,
               fontSize: 11,
               fontWeight: 600,
@@ -109,15 +110,16 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
             style={{
               padding: '12px 13px',
               background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 16,
+              border: '1px solid var(--glass-border)',
+              borderRadius: 18,
               display: 'flex',
               flexDirection: 'column',
               gap: 8,
+              backdropFilter: 'blur(18px)',
             }}
           >
             <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>
-              Step {step.step + 1} · {step.action.type}
+              {`Step ${step.step + 1} - ${step.action.type}`}
             </div>
             <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.45, fontWeight: 600 }}>
               {step.action.description}
@@ -161,9 +163,10 @@ function MetaRow({ label, value }: { label: string; value: string }) {
           lineHeight: 1.5,
           wordBreak: 'break-word',
           background: 'var(--surface)',
-          border: '1px solid var(--border)',
+          border: '1px solid var(--glass-border)',
           borderRadius: 10,
           padding: '7px 9px',
+          backdropFilter: 'blur(14px)',
         }}
       >
         {value}
@@ -174,7 +177,7 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 
 const denyButtonStyle: CSSProperties = {
   flex: 1,
-  background: 'var(--surface)',
+  background: 'var(--glass-button)',
   border: '1px solid var(--danger-border)',
   color: 'var(--danger)',
   borderRadius: 999,
@@ -182,6 +185,7 @@ const denyButtonStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',
+  backdropFilter: 'blur(18px)',
 }
 
 const approveButtonStyle: CSSProperties = {

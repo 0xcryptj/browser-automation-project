@@ -43,8 +43,16 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
   }
 
   let workingContext = cloneTaskContext(plan.context)
-  const { page } = await ensureBrowserSession(workingContext)
+  const interactive = hasInteractiveSteps(plan)
+  const { page, isolatedWorkspace } = await ensureBrowserSession(workingContext, {
+    interactive,
+    preferVisible: !interactive,
+  })
   const updatedSteps: ActionStep[] = plan.steps.map((s) => ({ ...s }))
+
+  if (interactive && isolatedWorkspace) {
+    workingContext = await bootstrapAutomationWorkspace(page, workingContext, plan.id, updatedSteps)
+  }
 
   for (let i = 0; i < updatedSteps.length; i++) {
     // Check for cancellation
@@ -187,8 +195,44 @@ function cloneTaskContext(context: TaskContext | undefined): TaskContext | undef
   return context ? JSON.parse(JSON.stringify(context)) as TaskContext : undefined
 }
 
+function hasInteractiveSteps(plan: TaskPlan) {
+  return plan.steps.some((step) =>
+    ['goto', 'click', 'type', 'select', 'scroll', 'hover', 'press', 'pressKey', 'wait_for_selector', 'wait_for_text'].includes(
+      step.action.type
+    )
+  )
+}
+
 function shouldRefreshContext(step: ActionStep) {
   return ['goto', 'click', 'type', 'select', 'press', 'pressKey', 'scroll'].includes(step.action.type)
+}
+
+async function bootstrapAutomationWorkspace(
+  page: Parameters<typeof observe>[0],
+  current: TaskContext | undefined,
+  taskId: string,
+  steps: ActionStep[]
+) {
+  const targetUrl = current?.url
+  const firstStep = steps.find((step) => step.status === 'pending')
+
+  if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
+    return current
+  }
+
+  if (firstStep?.action.type === 'goto') {
+    return current
+  }
+
+  const currentUrl = safeUrl(page.url())
+  if (currentUrl === normalizeUrl(targetUrl)) {
+    return current
+  }
+
+  console.info(`[task:${taskId}] opening isolated automation workspace at ${targetUrl}`)
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {})
+  return refreshTaskContext(page, current, taskId, 'bootstrap_workspace')
 }
 
 async function refreshTaskContext(
@@ -239,4 +283,16 @@ function resolveTargetLabel(context: TaskContext | undefined, step: ActionStep) 
     matchedElement.selector ??
     step.action.elementRef
   )
+}
+
+function normalizeUrl(url?: string | null) {
+  return url?.trim().replace(/\/$/, '').toLowerCase() || ''
+}
+
+function safeUrl(value?: string | null) {
+  try {
+    return value ? normalizeUrl(new URL(value).toString()) : ''
+  } catch {
+    return normalizeUrl(value)
+  }
 }

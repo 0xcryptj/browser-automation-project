@@ -66,6 +66,32 @@ The health response includes:
   - `pageCount`
   - `activePageUrl`
 
+## Optional: one-click local startup from the extension
+
+The extension can auto-start the local runner after a one-time Windows install of the native companion host.
+
+1. Load the unpacked extension once in Chrome or Brave.
+2. Copy the one-time setup command shown in the extension when the runner is offline.
+3. Run that command from the repo root in PowerShell.
+
+It looks like this:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\native-host\install-native-host.ps1 -ExtensionId <your-extension-id>
+```
+
+After that, opening the extension or submitting a task can launch the runner automatically in the background.
+
+What it does:
+
+- registers a native messaging host for Chrome and Brave
+- lets the unpacked extension start `pnpm runner:start`
+- keeps the backend local to your machine
+
+Logs for auto-start are written to:
+
+- `packages/runner/.local/runner-autostart.log`
+
 ## Build and load the extension
 
 ```powershell
@@ -84,6 +110,7 @@ Steps:
 3. Select `packages/extension/dist`
 4. Open the extension side panel from the toolbar button
 5. In `Settings -> Runner`, set the runner URL to match your port, for example `http://localhost:3001`
+6. If you want automatic local startup, run the native host install command once
 
 ## Provider configuration
 

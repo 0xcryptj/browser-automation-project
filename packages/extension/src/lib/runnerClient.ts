@@ -48,7 +48,100 @@ export type RunnerDebugStatus = RunnerHealth & {
   }
 }
 
+export type EnsureRunnerResult =
+  | {
+      ok: true
+      launched: boolean
+      health?: RunnerHealth
+      logPath?: string
+    }
+  | {
+      ok: false
+      error: string
+      helperCommand?: string
+      logPath?: string
+    }
+
+export type EnsureBrowserAttachResult =
+  | {
+      ok: true
+      launched: boolean
+      browser: 'brave' | 'chrome'
+      cdpUrl?: string
+      executable?: string
+      logPath?: string
+    }
+  | {
+      ok: false
+      error: string
+      helperCommand?: string
+      logPath?: string
+    }
+
 export const runnerClient = {
+  async ensureRunner(): Promise<EnsureRunnerResult> {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'ENSURE_RUNNER' }, (response) => {
+          if (chrome.runtime.lastError) {
+            resolve({
+              ok: false,
+              error: chrome.runtime.lastError.message ?? 'Automatic runner startup failed.',
+            })
+            return
+          }
+
+          resolve(
+            response && typeof response.ok === 'boolean'
+              ? (response as EnsureRunnerResult)
+              : {
+                  ok: false,
+                  error: 'Automatic runner startup returned an invalid response.',
+                }
+          )
+        })
+      } catch (error) {
+        resolve({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    })
+  },
+
+  async ensureBrowserAttach(
+    browser: 'brave' | 'chrome',
+    cdpUrl?: string
+  ): Promise<EnsureBrowserAttachResult> {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'ENSURE_BROWSER_ATTACH', browser, cdpUrl }, (response) => {
+          if (chrome.runtime.lastError) {
+            resolve({
+              ok: false,
+              error: chrome.runtime.lastError.message ?? 'Automatic browser attach failed.',
+            })
+            return
+          }
+
+          resolve(
+            response && typeof response.ok === 'boolean'
+              ? (response as EnsureBrowserAttachResult)
+              : {
+                  ok: false,
+                  error: 'Automatic browser attach returned an invalid response.',
+                }
+          )
+        })
+      } catch (error) {
+        resolve({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    })
+  },
+
   async health(): Promise<RunnerHealth> {
     const base = await getBase()
     const r = await fetch(`${base}/health`)
@@ -77,11 +170,26 @@ export const runnerClient = {
 
   async submitTask(task: Omit<TaskRequest, never>): Promise<{ taskId: string; plan: TaskResult['plan'] }> {
     const base = await getBase()
-    const r = await fetch(`${base}/task`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(task),
-    })
+    let r: Response
+    try {
+      r = await fetch(`${base}/task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(task),
+      })
+    } catch (error) {
+      const ensured = await runnerClient.ensureRunner()
+      if (!ensured.ok) {
+        throw new Error(ensured.error)
+      }
+
+      r = await fetch(`${base}/task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(task),
+      })
+    }
+
     if (!r.ok) {
       const err = await r.json().catch(() => ({ error: r.statusText }))
       // Attach Zod validation details when present so the user sees what failed.

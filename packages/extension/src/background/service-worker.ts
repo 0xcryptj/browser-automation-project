@@ -1,6 +1,8 @@
 /// <reference types="chrome" />
 import { DEFAULT_SETTINGS } from '@browser-automation/shared'
 
+const NATIVE_HOST_NAME = 'com.browser_automation.host'
+
 async function getRunnerBaseUrl(): Promise<string> {
   try {
     const stored = await chrome.storage.sync.get('settings')
@@ -26,6 +28,119 @@ function getTabAccessIssue(url?: string) {
   }
 
   return null
+}
+
+async function fetchRunnerHealth(runnerUrl: string) {
+  const response = await fetch(`${runnerUrl}/health`)
+  if (!response.ok) {
+    throw new Error(`Runner health failed with ${response.status} ${response.statusText}`)
+  }
+  return response.json()
+}
+
+function sendNativeHostMessage<T>(payload: Record<string, unknown>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendNativeMessage(NATIVE_HOST_NAME, payload, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message))
+          return
+        }
+        resolve((response ?? {}) as T)
+      })
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error(String(error)))
+    }
+  })
+}
+
+async function ensureRunnerStarted(runnerUrl: string) {
+  try {
+    const health = await fetchRunnerHealth(runnerUrl)
+    return { ok: true, launched: false, health }
+  } catch {
+    // Fall through to native host bootstrap.
+  }
+
+  try {
+    const response = await sendNativeHostMessage<{
+      ok?: boolean
+      launched?: boolean
+      error?: string
+      helperCommand?: string
+      logPath?: string
+      health?: unknown
+    }>({
+      type: 'ensure-runner',
+      runnerBaseUrl: runnerUrl,
+      extensionId: chrome.runtime.id,
+    })
+
+    if (response.ok) {
+      return {
+        ok: true,
+        launched: Boolean(response.launched),
+        health: response.health,
+        logPath: response.logPath,
+      }
+    }
+
+    return {
+      ok: false,
+      error: response.error ?? 'Could not start the local runner.',
+      helperCommand: response.helperCommand,
+      logPath: response.logPath,
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      ok: false,
+      error: `Automatic local startup is unavailable: ${message}`,
+      helperCommand: `powershell -ExecutionPolicy Bypass -File .\\tools\\native-host\\install-native-host.ps1 -ExtensionId ${chrome.runtime.id}`,
+    }
+  }
+}
+
+async function ensureBrowserAttach(browser: 'brave' | 'chrome', cdpUrl?: string) {
+  try {
+    const response = await sendNativeHostMessage<{
+      ok?: boolean
+      launched?: boolean
+      browser?: 'brave' | 'chrome'
+      cdpUrl?: string
+      executable?: string
+      error?: string
+      logPath?: string
+    }>({
+      type: 'ensure-browser-attach',
+      browser,
+      cdpUrl,
+    })
+
+    if (response.ok) {
+      return {
+        ok: true,
+        launched: Boolean(response.launched),
+        browser: response.browser ?? browser,
+        cdpUrl: response.cdpUrl ?? cdpUrl,
+        executable: response.executable,
+        logPath: response.logPath,
+      }
+    }
+
+    return {
+      ok: false,
+      error: response.error ?? `Could not restart ${browser} for attach mode.`,
+      logPath: response.logPath,
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      ok: false,
+      error: `Automatic browser attach is unavailable: ${message}`,
+      helperCommand: `powershell -ExecutionPolicy Bypass -File .\\tools\\native-host\\install-native-host.ps1 -ExtensionId ${chrome.runtime.id}`,
+    }
+  }
 }
 
 // Open side panel when the action button is clicked
@@ -95,14 +210,32 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'RUNNER_HEALTH') {
     getRunnerBaseUrl()
       .then(async (runnerUrl) => {
-        const response = await fetch(`${runnerUrl}/health`)
-        if (!response.ok) {
-          throw new Error(`Runner health failed with ${response.status} ${response.statusText}`)
-        }
-        return response.json()
+        return fetchRunnerHealth(runnerUrl)
       })
       .then((data) => sendResponse({ ok: true, data }))
       .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }))
+    return true
+  }
+
+  if (message.type === 'ENSURE_RUNNER') {
+    getRunnerBaseUrl()
+      .then((runnerUrl) => ensureRunnerStarted(runnerUrl))
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) })
+      )
+    return true
+  }
+
+  if (message.type === 'ENSURE_BROWSER_ATTACH') {
+    ensureBrowserAttach(
+      message.browser === 'chrome' ? 'chrome' : 'brave',
+      typeof message.cdpUrl === 'string' ? message.cdpUrl : undefined
+    )
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) })
+      )
     return true
   }
 

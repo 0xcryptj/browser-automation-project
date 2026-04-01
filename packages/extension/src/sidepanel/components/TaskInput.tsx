@@ -35,50 +35,87 @@ export function TaskInput({ onSubmit, disabled }: Props) {
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
-        padding: 14,
-        background: 'var(--panel)',
-        border: '1px solid var(--border)',
-        borderRadius: 18,
-        boxShadow: 'var(--shadow-soft)',
+        padding: 12,
+        background: 'color-mix(in srgb, var(--panel) 86%, transparent)',
+        border: '1px solid var(--glass-border)',
+        borderRadius: 24,
+        boxShadow: 'var(--shadow)',
+        backdropFilter: 'blur(24px) saturate(1.25)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+        }}
+      >
+        <button
+          type="button"
           style={{
-            width: 18,
-            height: 18,
+            width: 32,
+            height: 32,
             borderRadius: '50%',
-            background: 'radial-gradient(circle at 35% 35%, #93c5fd, #2563eb 65%, #111827)',
-            boxShadow: '0 0 0 5px rgba(59,130,246,0.10)',
+            border: '1px solid var(--glass-border)',
+            background: 'var(--glass-button)',
+            color: 'var(--muted)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             flexShrink: 0,
           }}
-        />
-        <div style={{ fontSize: 11, color: 'var(--text-soft)', fontWeight: 600 }}>Ask the browser to do something</div>
-      </div>
+          title="Tools coming next"
+        >
+          <PlusIcon />
+        </button>
 
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-        disabled={disabled}
-        placeholder="Tell me about this page, extract the heading, click sign in, or fill the visible form..."
-        rows={4}
-        style={{
-          resize: 'none',
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 14,
-          color: 'var(--text)',
-          fontSize: 13,
-          lineHeight: 1.55,
-          padding: '12px 13px',
-          width: '100%',
-          outline: 'none',
-          fontFamily: 'inherit',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)',
-        }}
-      />
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          placeholder="Ask anything…"
+          rows={3}
+          style={{
+            resize: 'none',
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text)',
+            fontSize: 14,
+            lineHeight: 1.6,
+            padding: '4px 0 0',
+            width: '100%',
+            outline: 'none',
+            fontFamily: 'inherit',
+          }}
+        />
+
+        <button
+          onClick={handleSubmit}
+          disabled={!canSubmit}
+          style={{
+            width: 38,
+            height: 38,
+            alignSelf: 'flex-end',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: canSubmit ? 'var(--button-grad)' : 'var(--glass-button)',
+            color: canSubmit ? '#0f172a' : 'var(--muted)',
+            border: `1px solid ${canSubmit ? 'rgba(255,255,255,0.24)' : 'var(--glass-border)'}`,
+            borderRadius: '50%',
+            cursor: canSubmit ? 'pointer' : 'not-allowed',
+            transition: 'all 120ms ease',
+            boxShadow: canSubmit ? '0 14px 28px rgba(49,102,255,0.24), inset 0 1px 0 rgba(255,255,255,0.28)' : 'none',
+            flexShrink: 0,
+            backdropFilter: 'blur(18px)',
+          }}
+          title={disabled ? 'Task running' : 'Run task'}
+        >
+          <SendIcon />
+        </button>
+      </div>
 
       <div
         style={{
@@ -89,33 +126,21 @@ export function TaskInput({ onSubmit, disabled }: Props) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: 11 }}>
-          <Keycap label="Enter" />
-          <span>to run</span>
-          <span style={{ color: 'var(--muted)' }}>Shift + Enter for a new line</span>
+          <div
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: disabled ? '#f59e0b' : '#22c55e',
+              boxShadow: `0 0 0 4px ${disabled ? 'rgba(245,158,11,0.12)' : 'rgba(34,197,94,0.12)'}`,
+            }}
+          />
+          <span>{disabled ? 'Working in the browser' : 'Ready to read, click, type, and automate'}</span>
         </div>
-
-        <button
-          onClick={handleSubmit}
-          disabled={!canSubmit}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            background: canSubmit ? '#f3f4f6' : 'var(--surface)',
-            color: canSubmit ? '#0f172a' : 'var(--muted)',
-            border: `1px solid ${canSubmit ? '#f8fafc' : 'var(--border)'}`,
-            borderRadius: 999,
-            padding: '8px 14px',
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: canSubmit ? 'pointer' : 'not-allowed',
-            transition: 'all 120ms ease',
-            boxShadow: canSubmit ? '0 8px 20px rgba(255,255,255,0.10)' : 'none',
-          }}
-        >
-          <SendIcon />
-          {disabled ? 'Running...' : 'Run task'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)', fontSize: 11 }}>
+          <Keycap label="Enter" />
+          <span>send</span>
+        </div>
       </div>
     </div>
   )
@@ -132,8 +157,8 @@ function Keycap({ label }: { label: string }) {
         height: 22,
         padding: '0 8px',
         borderRadius: 8,
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
+        background: 'var(--glass-button)',
+        border: '1px solid var(--glass-border)',
         color: 'var(--text-soft)',
         fontSize: 10,
         fontWeight: 600,
@@ -149,6 +174,15 @@ function SendIcon() {
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2L7 9" />
       <path d="M14 2L9.5 14 7 9 2 6.5 14 2Z" />
+    </svg>
+  )
+}
+
+function PlusIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+      <path d="M8 3v10" />
+      <path d="M3 8h10" />
     </svg>
   )
 }

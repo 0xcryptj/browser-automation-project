@@ -41,11 +41,12 @@ export function LiveTaskView({ state }: Props) {
           gap: 12,
           padding: 16,
           background: 'var(--panel)',
-          border: '1px solid var(--border)',
-          borderRadius: 18,
+          border: '1px solid var(--glass-border)',
+          borderRadius: 22,
           boxShadow: 'var(--shadow)',
           overflow: 'hidden',
           position: 'relative',
+          backdropFilter: 'blur(24px) saturate(1.22)',
         }}
       >
         <div
@@ -97,9 +98,10 @@ export function LiveTaskView({ state }: Props) {
             lineHeight: 1.5,
             color: 'var(--text-soft)',
             background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 14,
+            border: '1px solid var(--glass-border)',
+            borderRadius: 16,
             padding: '12px 13px',
+            backdropFilter: 'blur(18px)',
           }}
         >
           {state.prompt}
@@ -121,10 +123,11 @@ export function LiveTaskView({ state }: Props) {
             gap: 10,
             padding: '12px 14px',
             background: 'var(--panel)',
-            border: '1px solid var(--border)',
-            borderRadius: 14,
+            border: '1px solid var(--glass-border)',
+            borderRadius: 16,
             color: 'var(--text-soft)',
             fontSize: 12,
+            backdropFilter: 'blur(20px)',
           }}
         >
           <OrbitDots />
@@ -152,9 +155,10 @@ export function LiveTaskView({ state }: Props) {
                   gap: 12,
                   padding: '12px 13px',
                   background: active ? 'var(--panel-soft)' : 'var(--panel)',
-                  border: `1px solid ${active ? '#88aef633' : 'var(--border)'}`,
-                  borderRadius: 16,
-                  boxShadow: active ? '0 14px 28px rgba(37,99,235,0.12)' : 'none',
+                  border: `1px solid ${active ? 'rgba(135,176,255,0.28)' : 'var(--glass-border)'}`,
+                  borderRadius: 18,
+                  boxShadow: active ? '0 18px 34px rgba(37,99,235,0.12)' : 'var(--glass-shadow-soft)',
+                  backdropFilter: 'blur(20px) saturate(1.2)',
                 }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -188,14 +192,14 @@ export function LiveTaskView({ state }: Props) {
                   {(step.targetLabel || step.elementRef || step.selector) && (
                     <div
                       style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        marginBottom: 6,
-                        padding: '4px 8px',
-                        background: 'var(--surface)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 999,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      marginBottom: 6,
+                      padding: '4px 8px',
+                      background: 'var(--glass-button)',
+                      border: '1px solid var(--glass-border)',
+                      borderRadius: 999,
                         fontSize: 11,
                         color: 'var(--muted)',
                         maxWidth: '100%',
@@ -251,9 +255,10 @@ export function LiveTaskView({ state }: Props) {
           style={{
             padding: 14,
             background: 'var(--panel)',
-            border: '1px solid var(--border)',
-            borderRadius: 18,
+            border: '1px solid var(--glass-border)',
+            borderRadius: 22,
             boxShadow: 'var(--shadow-soft)',
+            backdropFilter: 'blur(22px)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -264,8 +269,8 @@ export function LiveTaskView({ state }: Props) {
             style={{
               padding: '12px 13px',
               background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 14,
+              border: '1px solid var(--glass-border)',
+              borderRadius: 16,
               fontSize: 12,
               color: 'var(--text-soft)',
               lineHeight: 1.65,
@@ -273,6 +278,7 @@ export function LiveTaskView({ state }: Props) {
               wordBreak: 'break-word',
               maxHeight: 320,
               overflowY: 'auto',
+              backdropFilter: 'blur(18px)',
             }}
           >
             {answer}
