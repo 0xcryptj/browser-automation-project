@@ -50,6 +50,7 @@ Do NOT require approval for benign navigation or search actions such as:
 - For prompts like "tell me about this page", "what are we viewing", or "summarize what is on this page", prefer one or two compact extract steps grounded on the current page's main content or body. Do not create a brittle chain of separate h1/main/body extracts unless the snapshot clearly shows those regions.
 - If the current page does not clearly expose a visible h1 or main region, use the best available stable ref or fall back to body instead of guessing.
 - For form filling, use observed labels, names, placeholders, and refs from the compact snapshot. Prefer elementRef over selector when possible.
+- For inbox or mailbox cleanup tasks, prefer: search/filter the inbox, submit the search, select the matching visible messages, then put ONLY the destructive delete/remove/trash step behind approval.
 - When a stable ref exists for a target button, link, input, textarea, select, heading, or main content region, include elementRef.
 - Keep plans short and executable. Do not add unnecessary screenshots or waits when the task does not need them.
 - For search tasks on YouTube, Google, or similar sites, stop at the search results page unless the user explicitly asked to open, play, watch, or click a result.

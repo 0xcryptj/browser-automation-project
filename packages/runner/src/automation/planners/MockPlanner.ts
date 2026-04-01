@@ -14,6 +14,7 @@ export class MockPlanner implements IPlanner {
     const prompt = request.prompt.toLowerCase()
     const snapshot = request.observation?.snapshot
     const steps: ActionStep[] = []
+    const inboxCleanupPlan = buildInboxCleanupPlan(request, snapshot)
     // Reading-task detection: broad set of patterns plus generic "tell me / what is / describe"
     // patterns followed by a page/site/website keyword.
     const pageKeyword =
@@ -74,11 +75,17 @@ export class MockPlanner implements IPlanner {
       }))
     }
 
+    if (inboxCleanupPlan.length > 0) {
+      for (const action of inboxCleanupPlan) {
+        steps.push(makeStep(steps.length, action))
+      }
+    }
+
     // ── Search / type ────────────────────────────────────────────────────
     const searchMatch = prompt.match(/search (?:for )?["']?([^"'\n]+?)["']?(?:\s+on\s+\w+)?$/)
     const typeMatch = prompt.match(/type\s+["']([^"']+)["']\s+(?:in|into)\s+(.+)/)
 
-    if (searchMatch && !typeMatch) {
+    if (searchMatch && !typeMatch && inboxCleanupPlan.length === 0) {
       const query = searchMatch[1].trim()
       const sel = 'input[type="search"], input[name="q"], input[name="search"], input[type="text"]'
       steps.push(makeStep(steps.length, {
@@ -99,7 +106,7 @@ export class MockPlanner implements IPlanner {
       }))
     }
 
-    if (typeMatch) {
+    if (typeMatch && inboxCleanupPlan.length === 0) {
       const field = findFieldRef(snapshot, typeMatch[2].trim())
       steps.push(makeStep(steps.length, {
         type: 'type',
@@ -114,7 +121,7 @@ export class MockPlanner implements IPlanner {
 
     // ── Click ─────────────────────────────────────────────────────────────
     const clickMatch = prompt.match(/click\s+(?:on\s+)?["']?([^"'\n]+?)["']?$/)
-    if (clickMatch) {
+    if (clickMatch && inboxCleanupPlan.length === 0) {
       const target = clickMatch[1].trim()
       const isSensitive = SENSITIVE_ACTION_KEYWORDS.some((k) => target.includes(k))
       const element = findElementRef(snapshot, target, ['button', 'link', 'actionable'])
@@ -354,6 +361,97 @@ function findFieldRef(snapshot: CompactPageSnapshot | undefined, target: string)
     })
 
   return field
+}
+
+function buildInboxCleanupPlan(snapshotRequest: TaskRequest, snapshot: CompactPageSnapshot | undefined): PartialAction[] {
+  const prompt = snapshotRequest.prompt.toLowerCase()
+  const mentionsInbox =
+    prompt.includes('inbox') ||
+    prompt.includes('mailbox') ||
+    prompt.includes('gmail') ||
+    prompt.includes('outlook') ||
+    prompt.includes('email')
+  const mentionsDelete =
+    prompt.includes('delete') ||
+    prompt.includes('remove') ||
+    prompt.includes('trash')
+  const cleanupMatch =
+    prompt.match(/find all (?:the )?(.+?) in my inbox and (?:delete|remove|trash) them/) ||
+    prompt.match(/delete all (.+?) in my inbox/) ||
+    prompt.match(/remove all (.+?) from my inbox/)
+
+  if (!mentionsInbox || !mentionsDelete || !cleanupMatch) {
+    return []
+  }
+
+  const rawQuery = cleanupMatch[1] ?? ''
+  const query = rawQuery
+    .replace(/\bnotifications?\b/g, '')
+    .replace(/\bemails?\b/g, '')
+    .replace(/\bmessages?\b/g, '')
+    .trim()
+  const searchValue = query || rawQuery.trim() || 'helpdesk'
+  const searchField =
+    findFieldRef(snapshot, `search ${searchValue}`) ||
+    findFieldRef(snapshot, 'search inbox') ||
+    findFieldRef(snapshot, 'search mail') ||
+    findFieldRef(snapshot, 'search') ||
+    snapshot?.elements.find((element) =>
+      ['input', 'textarea'].includes(element.kind) &&
+      normalizeTarget([element.label, element.name, element.placeholder, element.selector].filter(Boolean).join(' ')).includes('search')
+    )
+
+  const selectAll =
+    findElementRef(snapshot, 'select all', ['button', 'actionable']) ||
+    findElementRef(snapshot, 'select all conversations', ['button', 'actionable']) ||
+    findElementRef(snapshot, 'select all messages', ['button', 'actionable']) ||
+    findElementRef(snapshot, 'checkbox', ['actionable'])
+
+  const deleteAction =
+    findElementRef(snapshot, 'delete', ['button', 'actionable']) ||
+    findElementRef(snapshot, 'trash', ['button', 'actionable']) ||
+    findElementRef(snapshot, 'move to trash', ['button', 'actionable'])
+
+  const selectSelector = selectAll?.selector ?? 'input[type="checkbox"], [aria-label*="Select all"], button[aria-label*="Select"]'
+  const deleteSelector = deleteAction?.selector ?? '[aria-label*="Delete"], [aria-label*="Trash"], button:has-text("Delete"), button:has-text("Trash")'
+
+  return [
+    {
+      type: 'type',
+      elementRef: searchField?.ref,
+      selector: searchField?.selector ?? 'input[type="search"], input[name*="search"], input[placeholder*="Search"], textarea[placeholder*="Search"]',
+      value: searchValue,
+      description: `Search the inbox for "${searchValue}"`,
+      requiresApproval: false,
+      sensitivity: 'none',
+    },
+    {
+      type: 'press',
+      elementRef: searchField?.ref,
+      selector: searchField?.selector ?? 'input[type="search"], input[name*="search"], input[placeholder*="Search"], textarea[placeholder*="Search"]',
+      key: 'Enter',
+      description: `Run the inbox search for "${searchValue}"`,
+      requiresApproval: false,
+      sensitivity: 'none',
+    },
+    {
+      type: 'click',
+      elementRef: selectAll?.ref,
+      selector: selectSelector,
+      description: 'Select the matching inbox messages',
+      requiresApproval: false,
+      sensitivity: 'none',
+    },
+    {
+      type: 'click',
+      elementRef: deleteAction?.ref,
+      selector: deleteSelector,
+      description: `Delete the matching "${searchValue}" inbox messages`,
+      requiresApproval: true,
+      sensitivity: 'delete',
+      approvalReason: `Deleting inbox items that match "${searchValue}" is destructive and should be confirmed first.`,
+    },
+  ]
 }
 
 function normalizeTarget(value: string) {
