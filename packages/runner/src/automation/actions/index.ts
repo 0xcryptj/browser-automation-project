@@ -374,17 +374,34 @@ async function extractText(
     return observedFallback
   }
 
-  const bodyText = await page.evaluate(() =>
-    document.body?.innerText?.replace(/\s+/g, ' ').trim().slice(0, 4000) ?? ''
-  )
+  const bodyText = await page.evaluate(() => {
+    // Try multiple extraction strategies for complex SPAs
+    const getText = (el: Element | null) =>
+      el ? ((el as HTMLElement).innerText || el.textContent || '').replace(/\s+/g, ' ').trim() : ''
+
+    // Strategy 1: direct body innerText
+    const body = getText(document.body)
+    if (body.length > 50) return body.slice(0, 4000)
+
+    // Strategy 2: aggregate all visible text nodes (for shadow DOM / virtual scrolling)
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    const chunks: string[] = []
+    let total = 0
+    while (walker.nextNode() && total < 4200) {
+      const text = (walker.currentNode.textContent ?? '').trim()
+      if (text.length > 1) {
+        chunks.push(text)
+        total += text.length
+      }
+    }
+    return chunks.join(' ').slice(0, 4000)
+  }).catch(() => '')
 
   if (bodyText) {
     return normalizeText(bodyText)
   }
 
   // Last resort: use ANY context text the extension collected, ignoring URL matching.
-  // This handles the case where observation exists but extractFromObservedContext
-  // returned nothing because the URL selector didn't match main/article/body.
   const anyContextText =
     context?.text?.trim() ||
     context?.textBlocks?.join(' ')?.trim() ||
@@ -394,6 +411,12 @@ async function extractText(
 
   if (anyContextText) {
     return normalizeText(anyContextText)
+  }
+
+  // Final fallback: return the page title rather than throwing
+  const pageTitle = await page.title().catch(() => '')
+  if (pageTitle.trim()) {
+    return normalizeText(`[Page title] ${pageTitle}`)
   }
 
   throw new Error(`Could not extract readable text from ${selector ?? 'the current page'}`)

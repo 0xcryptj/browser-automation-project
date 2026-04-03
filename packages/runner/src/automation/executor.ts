@@ -77,11 +77,20 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
 
   let workingContext = cloneTaskContext(plan.context)
   const interactive = hasInteractiveSteps(plan)
+  const contextOnly = canRunFromContextOnly(plan)
+  const updatedSteps: ActionStep[] = plan.steps.map((s) => ({ ...s }))
+
+  // For extract-only tasks with existing context, skip browser launch entirely.
+  // This avoids opening a separate Chromium window when the extension already
+  // collected the page content from the user's browser.
+  if (contextOnly && workingContext) {
+    return executeFromContext(plan, updatedSteps, workingContext, startTime)
+  }
+
   const { page, isolatedWorkspace } = await ensureBrowserSession(workingContext, {
     interactive,
     preferVisible: interactive,
   })
-  const updatedSteps: ActionStep[] = plan.steps.map((s) => ({ ...s }))
 
   if (interactive && isolatedWorkspace) {
     workingContext = await bootstrapAutomationWorkspace(page, workingContext, plan.id, updatedSteps)
@@ -330,6 +339,81 @@ function resolveTargetLabel(context: TaskContext | undefined, step: ActionStep) 
     matchedElement.selector ??
     step.action.elementRef
   )
+}
+
+function canRunFromContextOnly(plan: TaskPlan) {
+  const contextOnlyActions = new Set(['extract', 'screenshot'])
+  return (
+    plan.steps.length > 0 &&
+    plan.steps.every((step) => contextOnlyActions.has(step.action.type)) &&
+    plan.context != null
+  )
+}
+
+async function executeFromContext(
+  plan: TaskPlan,
+  updatedSteps: ActionStep[],
+  workingContext: TaskContext,
+  startTime: number
+): Promise<TaskResult> {
+  console.info(`[task:${plan.id}] running from observed context (no browser needed)`)
+
+  for (let i = 0; i < updatedSteps.length; i++) {
+    if (cancelledTasks.has(plan.id)) break
+    const step = updatedSteps[i]
+    if (step.status !== 'pending') continue
+
+    const stepStart = Date.now()
+    updatedSteps[i] = { ...step, status: 'running' }
+    taskBus.publish({
+      type: 'step_started',
+      taskId: plan.id,
+      stepIndex: i,
+      actionType: step.action.type,
+      description: step.action.description,
+      pageUrl: workingContext.url,
+    })
+
+    if (step.action.type === 'extract') {
+      const text =
+        workingContext.text?.trim() ||
+        workingContext.textBlocks?.join(' ')?.trim() ||
+        workingContext.snapshot?.visibleTextSummary?.trim() ||
+        (workingContext.headings?.length ? workingContext.headings.join('. ') : '') ||
+        workingContext.title?.trim() ||
+        ''
+
+      if (text) {
+        const normalized = text.replace(/\s+/g, ' ').trim().slice(0, 4000)
+        updatedSteps[i] = { ...step, status: 'done', result: normalized, durationMs: Date.now() - stepStart }
+        taskBus.publish({ type: 'step_succeeded', taskId: plan.id, stepIndex: i, result: normalized, hasScreenshot: false, durationMs: Date.now() - stepStart })
+      } else {
+        updatedSteps[i] = { ...step, status: 'failed', error: 'No readable content available from the page context.', durationMs: Date.now() - stepStart }
+        taskBus.publish({ type: 'step_failed', taskId: plan.id, stepIndex: i, error: 'No readable content available from the page context.', retrying: false, hasScreenshot: false, pageUrl: workingContext.url })
+      }
+    } else {
+      updatedSteps[i] = { ...step, status: 'done', result: 'Context-only mode', durationMs: Date.now() - stepStart }
+      taskBus.publish({ type: 'step_succeeded', taskId: plan.id, stepIndex: i, result: 'Context-only mode', hasScreenshot: false, durationMs: Date.now() - stepStart })
+    }
+  }
+
+  const cancelled = cancelledTasks.has(plan.id)
+  const anyFailed = updatedSteps.some((s) => s.status === 'failed')
+  const durationMs = Date.now() - startTime
+  const stepsDone = updatedSteps.filter((s) => s.status === 'done').length
+  const stepsFailed = updatedSteps.filter((s) => s.status === 'failed').length
+  const finalStatus = cancelled ? 'cancelled' : anyFailed ? 'failed' : 'done'
+
+  if (cancelled) {
+    taskBus.publish({ type: 'task_cancelled', taskId: plan.id, reason: 'Task cancelled by user', durationMs })
+  } else if (anyFailed) {
+    taskBus.publish({ type: 'task_failed', taskId: plan.id, error: updatedSteps.find((s) => s.status === 'failed')?.error ?? 'Task failed', durationMs, stepsDone, stepsFailed })
+  } else {
+    taskBus.publish({ type: 'task_completed', taskId: plan.id, status: 'done', durationMs, stepsDone, stepsFailed })
+  }
+
+  cancelledTasks.delete(plan.id)
+  return { taskId: plan.id, plan: { ...plan, steps: updatedSteps, status: finalStatus, context: workingContext }, durationMs }
 }
 
 function normalizeUrl(url?: string | null) {

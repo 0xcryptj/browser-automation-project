@@ -284,17 +284,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         })
         return
       }
-      chrome.tabs.sendMessage(tab.id, { type: 'COLLECT_CONTEXT', options: message.options }, (response) => {
-        if (chrome.runtime.lastError) {
-          sendResponse({
-            error: chrome.runtime.lastError.message ?? 'Could not reach the page content script.',
-            url: tab.url ?? '',
-            title: tab.title ?? '',
-            restricted: false,
-          })
-        } else {
+      const tabId = tab.id
+      const collectMsg = { type: 'COLLECT_CONTEXT', options: message.options }
+
+      chrome.tabs.sendMessage(tabId, collectMsg, (response) => {
+        if (!chrome.runtime.lastError) {
           sendResponse(response)
+          return
         }
+
+        // Content script not yet injected (e.g. tab was open before extension loaded).
+        // Programmatically inject it and retry once.
+        chrome.scripting
+          .executeScript({
+            target: { tabId },
+            files: ['content-script.js'],
+          })
+          .then(() => {
+            setTimeout(() => {
+              chrome.tabs.sendMessage(tabId, collectMsg, (retryResponse) => {
+                if (chrome.runtime.lastError || !retryResponse) {
+                  sendResponse({
+                    error:
+                      chrome.runtime.lastError?.message ??
+                      'Could not reach the page content script after injection.',
+                    url: tab.url ?? '',
+                    title: tab.title ?? '',
+                    restricted: false,
+                  })
+                } else {
+                  sendResponse(retryResponse)
+                }
+              })
+            }, 150)
+          })
+          .catch(() => {
+            sendResponse({
+              error: 'Could not inject content script into this tab.',
+              url: tab.url ?? '',
+              title: tab.title ?? '',
+              restricted: false,
+            })
+          })
       })
     })
     return true

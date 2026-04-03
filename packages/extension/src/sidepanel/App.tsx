@@ -354,7 +354,7 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <button
             onClick={() => void checkRunner()}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 6 }}
             title={runnerStatus}
           >
             <span
@@ -368,6 +368,14 @@ export default function App() {
               }}
             />
           </button>
+          {activeTab?.faviconUrl && (
+            <img
+              src={activeTab.faviconUrl}
+              alt=""
+              style={{ width: 16, height: 16, borderRadius: 3, flexShrink: 0 }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          )}
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {activeTab?.hostname || 'AutoAssist'}
           </span>
