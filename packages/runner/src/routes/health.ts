@@ -23,7 +23,11 @@ export async function healthRoutes(server: FastifyInstance) {
     }
   })
 
-  server.get('/debug/status', async () => {
+  server.get('/debug/status', async (request, reply) => {
+    const ip = request.ip
+    if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
+      return reply.status(403).send({ error: 'Forbidden' })
+    }
     const browser = getBrowserState()
     const planner = await getPublicPlannerConfig()
     const browserTarget = await getPublicBrowserConfig()

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { StreamState } from '../hooks/useTaskStream.js'
 import {
   ActionIcon,
@@ -107,8 +108,11 @@ export function LiveTaskView({ state }: Props) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <StatusPill label={meta.label} color={meta.color} />
             {state.durationMs !== null && (
-              <span style={{ fontSize: 11, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
-                {(state.durationMs / 1000).toFixed(1)}s
+              <span
+                style={{ fontSize: 11, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}
+                aria-label={`Duration: ${formatDuration(state.durationMs)}`}
+              >
+                {formatDuration(state.durationMs)}
               </span>
             )}
           </div>
@@ -131,10 +135,18 @@ export function LiveTaskView({ state }: Props) {
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Metric label="Done" value={String(doneCount)} color="#22c55e" />
-          <Metric label="Failed" value={String(failedCount)} color="#ef4444" />
+          {failedCount > 0 && <Metric label="Failed" value={String(failedCount)} color="#ef4444" />}
           <Metric label="Total" value={String(state.stepCount || state.steps.length)} color="#94a3b8" />
           {activeStep && <Metric label="Active" value={`Step ${activeStep.index + 1}`} color="#60a5fa" />}
         </div>
+        {/* Step progress bar */}
+        {(state.stepCount || state.steps.length) > 0 && (
+          <StepProgressBar
+            done={doneCount}
+            failed={failedCount}
+            total={state.stepCount || state.steps.length}
+          />
+        )}
       </div>
 
       {(state.status === 'streaming' || state.status === 'planning' || state.status === 'submitting') && state.steps.length === 0 && (
@@ -282,11 +294,11 @@ export function LiveTaskView({ state }: Props) {
                       style={{
                         marginTop: 4,
                         padding: '8px 9px',
-                        background: '#160a0a',
-                        border: '1px solid #3a1414',
+                        background: 'var(--danger-bg)',
+                        border: '1px solid var(--danger-border)',
                         borderRadius: 12,
                         fontSize: 11,
-                        color: '#fca5a5',
+                        color: 'var(--danger)',
                         lineHeight: 1.5,
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
@@ -322,51 +334,17 @@ export function LiveTaskView({ state }: Props) {
         </div>
       )}
 
-      {answer && (
-        <div
-          style={{
-            padding: 14,
-            background: 'var(--panel)',
-            border: '1px solid var(--glass-border)',
-            borderRadius: 22,
-            boxShadow: 'var(--shadow-soft)',
-            backdropFilter: 'blur(22px)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <DocumentIcon style={{ color: 'var(--muted)' }} />
-            <span style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>Assistant response</span>
-          </div>
-          <div
-            style={{
-              padding: '12px 13px',
-              background: 'var(--surface)',
-              border: '1px solid var(--glass-border)',
-              borderRadius: 16,
-              fontSize: 12,
-              color: 'var(--text-soft)',
-              lineHeight: 1.65,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              maxHeight: 320,
-              overflowY: 'auto',
-              backdropFilter: 'blur(18px)',
-            }}
-          >
-            {answer}
-          </div>
-        </div>
-      )}
+      {answer && <AnswerCard answer={answer} />}
 
       {state.error && (
         <div
           style={{
             padding: '12px 13px',
-            background: '#160a0a',
-            border: '1px solid #3a1414',
+            background: 'var(--danger-bg)',
+            border: '1px solid var(--danger-border)',
             borderRadius: 14,
             fontSize: 12,
-            color: '#fca5a5',
+            color: 'var(--danger)',
             lineHeight: 1.55,
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
@@ -374,6 +352,126 @@ export function LiveTaskView({ state }: Props) {
         >
           {state.error}
         </div>
+      )}
+    </div>
+  )
+}
+
+function formatDuration(ms: number) {
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
+  const mins = Math.floor(ms / 60_000)
+  const secs = Math.floor((ms % 60_000) / 1000)
+  return `${mins}m ${secs}s`
+}
+
+function AnswerCard({ answer }: { answer: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(answer)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // clipboard unavailable
+    }
+  }
+
+  return (
+    <div
+      style={{
+        padding: 14,
+        background: 'var(--panel)',
+        border: '1px solid var(--glass-border)',
+        borderRadius: 22,
+        boxShadow: 'var(--shadow-soft)',
+        backdropFilter: 'blur(22px)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <DocumentIcon style={{ color: 'var(--muted)' }} />
+          <span style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>Assistant response</span>
+        </div>
+        <button
+          onClick={() => void handleCopy()}
+          aria-label={copied ? 'Copied' : 'Copy response'}
+          title={copied ? 'Copied!' : 'Copy to clipboard'}
+          style={{
+            background: 'var(--glass-button)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 8,
+            color: copied ? '#22c55e' : 'var(--muted)',
+            fontSize: 10,
+            fontWeight: 600,
+            padding: '3px 8px',
+            cursor: 'pointer',
+            transition: 'color 150ms ease',
+          }}
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <div
+        style={{
+          padding: '12px 13px',
+          background: 'var(--surface)',
+          border: '1px solid var(--glass-border)',
+          borderRadius: 16,
+          fontSize: 12,
+          color: 'var(--text-soft)',
+          lineHeight: 1.65,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          maxHeight: 320,
+          overflowY: 'auto',
+          backdropFilter: 'blur(18px)',
+        }}
+      >
+        {answer}
+      </div>
+    </div>
+  )
+}
+
+function StepProgressBar({ done, failed, total }: { done: number; failed: number; total: number }) {
+  if (total === 0) return null
+  const donePercent = Math.round((done / total) * 100)
+  const failedPercent = Math.round((failed / total) * 100)
+
+  return (
+    <div
+      role="progressbar"
+      aria-valuenow={done}
+      aria-valuemin={0}
+      aria-valuemax={total}
+      aria-label={`${done} of ${total} steps completed`}
+      style={{
+        height: 4,
+        borderRadius: 999,
+        background: 'var(--surface)',
+        overflow: 'hidden',
+        display: 'flex',
+      }}
+    >
+      <div
+        style={{
+          height: '100%',
+          width: `${donePercent}%`,
+          background: '#22c55e',
+          transition: 'width 300ms ease',
+          borderRadius: failed > 0 ? '999px 0 0 999px' : 999,
+        }}
+      />
+      {failed > 0 && (
+        <div
+          style={{
+            height: '100%',
+            width: `${failedPercent}%`,
+            background: '#ef4444',
+            borderRadius: '0 999px 999px 0',
+          }}
+        />
       )}
     </div>
   )

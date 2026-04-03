@@ -3,7 +3,7 @@ node_modules/
 dist/
 .DS_Store
 *.log
-runner-smoke-*.json
+runner-*.json
 .env
 .env.*
 !.env.example
@@ -14,3 +14,8 @@ packages/shared/dist/
 *.tsbuildinfo
 .pnpm-store/
 tools/native-host/browser-automation-native-host.exe
+# Editor / OS artifacts
+*.suo
+.idea/
+.vscode/settings.json
+Thumbs.db

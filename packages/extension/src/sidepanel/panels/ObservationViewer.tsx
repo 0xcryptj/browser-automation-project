@@ -3,7 +3,7 @@ import type { PageObservation } from '@browser-automation/shared'
 
 interface Props {
   observation: PageObservation | null
-  onRefresh: () => void
+  onRefresh: (mode?: 'task' | 'observe', behavior?: { quietOnFailure?: boolean }) => Promise<PageObservation | null>
   loading?: boolean
 }
 
@@ -27,7 +27,7 @@ export function ObservationViewer({ observation, onRefresh, loading }: Props) {
             Compact snapshot of the current page with stable refs for planning and execution.
           </div>
         </div>
-        <button onClick={onRefresh} disabled={loading} style={loading ? loadingButtonStyle : buttonStyle}>
+        <button onClick={() => void onRefresh()} disabled={loading} style={loading ? loadingButtonStyle : buttonStyle}>
           {loading ? 'Collecting...' : 'Refresh'}
         </button>
       </div>

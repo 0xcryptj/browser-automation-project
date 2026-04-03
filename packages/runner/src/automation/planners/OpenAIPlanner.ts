@@ -23,6 +23,10 @@ export class OpenAIPlanner implements IPlanner {
   }
 
   async plan(request: TaskRequest): Promise<TaskPlan> {
+    if (!this.options.apiKey || !this.options.apiKey.trim()) {
+      return failedPlan(request, 'OpenAI API key is missing or empty.', this.name)
+    }
+
     const userContent = buildPlannerInput(request)
 
     let raw: string
@@ -36,7 +40,22 @@ export class OpenAIPlanner implements IPlanner {
         ],
         max_tokens: 2048,
       })
-      raw = completion.choices[0]?.message?.content?.trim() ?? ''
+
+      const choice = completion.choices[0]
+      if (choice?.finish_reason === 'length') {
+        console.warn(`[planner:${this.name}] Response truncated (finish_reason=length). Consider raising max_tokens.`)
+        return failedPlan(request, 'OpenAI response was truncated (max_tokens reached). The plan JSON is incomplete.', this.name)
+      }
+
+      const usage = completion.usage
+      if (usage) {
+        console.info(`[planner:${this.name}] token_usage prompt=${usage.prompt_tokens} completion=${usage.completion_tokens} total=${usage.total_tokens}`)
+      }
+
+      raw = choice?.message?.content?.trim() ?? ''
+      if (!raw) {
+        return failedPlan(request, 'OpenAI returned an empty response.', this.name)
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return failedPlan(request, `OpenAI API error: ${message}`, this.name)

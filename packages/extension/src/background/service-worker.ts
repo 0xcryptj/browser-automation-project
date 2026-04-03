@@ -214,7 +214,9 @@ async function sendOverlayMessageToTabs(
 chrome.action.onClicked.addListener((tab) => {
   if (tab.id) {
     void maybeEnsureRunnerOnOpen()
-    chrome.sidePanel.open({ tabId: tab.id })
+    chrome.sidePanel.open({ tabId: tab.id }).catch(() => {
+      // Brave and some Chromium forks may throw on restricted tabs (brave://, etc.)
+    })
   }
 })
 
@@ -229,7 +231,8 @@ chrome.runtime.onInstalled.addListener(() => {
   void maybeEnsureRunnerOnOpen()
 })
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return
   if (message.type === 'TASK_OVERLAY_SHOW' || message.type === 'TASK_OVERLAY_CLEAR') {
     const payload = typeof message.payload === 'object' && message.payload ? message.payload : undefined
     const pageUrl = typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined

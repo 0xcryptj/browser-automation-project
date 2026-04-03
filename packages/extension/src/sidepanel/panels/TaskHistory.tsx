@@ -104,7 +104,8 @@ export function TaskHistory({ onRerun }: Props) {
               borderRadius: 18,
               cursor: onRerun ? 'pointer' : 'default',
               textAlign: 'left',
-              boxShadow: '0 10px 24px rgba(0,0,0,0.16)',
+              boxShadow: 'var(--shadow-soft)',
+              transition: 'background 0.15s, box-shadow 0.15s',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>

@@ -138,7 +138,12 @@ export function useTaskStream() {
           observation: observation ?? undefined,
         })
 
-        const id: string = data.taskId ?? taskId
+        // The server always generates its own task ID — if the response doesn't
+        // include one, the stream URL will be wrong and no events will arrive.
+        if (!data.taskId || typeof data.taskId !== 'string') {
+          throw new Error('Runner returned an invalid or missing taskId. Check runner logs.')
+        }
+        const id: string = data.taskId
 
         setState((prev) => ({
           ...prev,

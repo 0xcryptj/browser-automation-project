@@ -6,12 +6,13 @@ interface Props {
 
 export function FutureLoginScreen({ videoSrc }: Props) {
   return (
+    <div style={{ opacity: 0.72 }}>
     <div
       style={{
         position: 'relative',
-        minHeight: 280,
+        minHeight: 160,
         overflow: 'hidden',
-        borderRadius: 28,
+        borderRadius: 22,
         border: '1px solid var(--glass-border)',
         boxShadow: 'var(--shadow)',
         background:
@@ -45,8 +46,8 @@ export function FutureLoginScreen({ videoSrc }: Props) {
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          minHeight: 280,
-          padding: 22,
+          minHeight: 160,
+          padding: 14,
         }}
       >
         <div
@@ -85,10 +86,10 @@ export function FutureLoginScreen({ videoSrc }: Props) {
             gap: 10,
           }}
         >
-          <div style={{ fontSize: 28, lineHeight: 1.04, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.05em' }}>
+          <div style={{ fontSize: 18, lineHeight: 1.1, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.03em' }}>
             A cleaner entry point for the operator.
           </div>
-          <div style={{ fontSize: 13, lineHeight: 1.65, color: 'rgba(255,255,255,0.82)' }}>
+          <div style={{ fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,0.75)' }}>
             This preview is ready for your video background. Once you give me the local asset path, I can wire it in directly.
           </div>
 
@@ -98,6 +99,7 @@ export function FutureLoginScreen({ videoSrc }: Props) {
           </div>
         </div>
       </div>
+    </div>
     </div>
   )
 }

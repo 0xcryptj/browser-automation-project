@@ -4,7 +4,7 @@ import { runnerClient } from '../../lib/runnerClient.js'
 
 interface Props {
   pageObservation: PageObservation | null
-  onCollectPage: () => Promise<PageObservation | null>
+  onCollectPage: (mode?: 'task' | 'observe', behavior?: { quietOnFailure?: boolean }) => Promise<PageObservation | null>
 }
 
 export function AssistPanel({ pageObservation, onCollectPage }: Props) {

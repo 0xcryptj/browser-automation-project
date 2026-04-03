@@ -22,7 +22,15 @@ export async function getSettings(): Promise<ExtensionSettings> {
 export async function saveSettings(settings: Partial<ExtensionSettings>): Promise<void> {
   const current = await getSettings()
   const merged = SettingsSchema.parse({ ...current, ...settings })
-  await chrome.storage.sync.set({ settings: merged })
+  try {
+    await chrome.storage.sync.set({ settings: merged })
+  } catch (err) {
+    throw new Error(
+      `Failed to save settings: ${
+        err instanceof Error ? err.message : String(err)
+      }. Check storage quota or extension permissions.`
+    )
+  }
 }
 
 // ── User Profile ──────────────────────────────────────────────────────────────
@@ -41,7 +49,15 @@ export async function getProfile(): Promise<UserProfile> {
 export async function saveProfile(profile: Partial<UserProfile>): Promise<void> {
   const current = await getProfile()
   const merged = ProfileSchema.parse({ ...current, ...profile })
-  await chrome.storage.local.set({ profile: merged })
+  try {
+    await chrome.storage.local.set({ profile: merged })
+  } catch (err) {
+    throw new Error(
+      `Failed to save profile: ${
+        err instanceof Error ? err.message : String(err)
+      }.`
+    )
+  }
 }
 
 // ── Task History ──────────────────────────────────────────────────────────────
@@ -57,7 +73,11 @@ export async function getHistory(): Promise<HistoryEntry[]> {
 export async function addHistoryEntry(entry: HistoryEntry, maxEntries = 50): Promise<void> {
   const history = await getHistory()
   const updated = [entry, ...history.filter((item) => item.id !== entry.id)].slice(0, maxEntries)
-  await chrome.storage.local.set({ taskHistory: updated })
+  try {
+    await chrome.storage.local.set({ taskHistory: updated })
+  } catch {
+    // History writes are best-effort; a storage failure should not break task flow.
+  }
 }
 
 export async function clearHistory(): Promise<void> {

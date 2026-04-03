@@ -6,13 +6,45 @@ import { ensureBrowserSession } from './browserManager.js'
 
 /** Track cancelled tasks to stop mid-execution */
 const cancelledTasks = new Set<string>()
-taskBus.on('all', (event: { type: string; taskId: string }) => {
-  if (event.type === 'task_cancelled') cancelledTasks.add(event.taskId)
+
+// Listen for cancellation events on the global channel so we can abort mid-execution.
+// We use the raw EventEmitter `on` here because we need to listen across all taskIds,
+// not subscribe to a single task channel.
+taskBus.on('all', (event: unknown) => {
+  if (
+    event !== null &&
+    typeof event === 'object' &&
+    'type' in event &&
+    'taskId' in event &&
+    (event as { type: string }).type === 'task_cancelled' &&
+    typeof (event as { taskId: unknown }).taskId === 'string'
+  ) {
+    cancelledTasks.add((event as { taskId: string }).taskId)
+  }
 })
 
 export async function execute(plan: TaskPlan): Promise<TaskResult> {
   const startTime = Date.now()
-  cancelledTasks.delete(plan.id) // reset on fresh execution
+
+  // Check if the task was cancelled while waiting in the execution queue
+  // before we erase the signal and start running.
+  if (cancelledTasks.has(plan.id)) {
+    cancelledTasks.delete(plan.id)
+    console.info(`[task:${plan.id}] cancelled before execution started`)
+    taskBus.publish({
+      type: 'task_cancelled',
+      taskId: plan.id,
+      reason: 'Task cancelled by user',
+      durationMs: 0,
+    })
+    return {
+      taskId: plan.id,
+      plan: { ...plan, status: 'cancelled' },
+      durationMs: 0,
+    }
+  }
+
+  cancelledTasks.delete(plan.id) // clear any stale signal from a previous run
   console.info(`[task:${plan.id}] started prompt=${JSON.stringify(plan.prompt.slice(0, 120))}`)
 
   taskBus.publish({ type: 'task_started', taskId: plan.id, prompt: plan.prompt })
@@ -56,7 +88,7 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
   }
 
   for (let i = 0; i < updatedSteps.length; i++) {
-    // Check for cancellation
+    // Check for cancellation before each step
     if (cancelledTasks.has(plan.id)) {
       break
     }
@@ -139,18 +171,18 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
         hasScreenshot: Boolean(result.screenshot),
         pageUrl: safeUrl(page.url()) || workingContext?.url,
       })
-      console.warn(`[executor] Step ${i} failed: ${result.error}`)
-      // Navigation failures are fatal; others continue
+      console.warn(`[executor] Step ${i} (${step.action.type}) failed: ${result.error}`)
+      // Navigation failures are fatal for this execution — all subsequent steps assume the page loaded
       if (step.action.type === 'goto') break
     }
   }
 
-  // Verify: observe final page state
+  // Verify: observe final page state (best-effort, non-fatal)
   let finalObservation
   try {
     finalObservation = await observe(page, false)
   } catch {
-    // page may have closed; non-fatal
+    // Page may have closed or navigated away — acceptable
   }
 
   const cancelled = cancelledTasks.has(plan.id)
@@ -207,7 +239,7 @@ export async function execute(plan: TaskPlan): Promise<TaskResult> {
 }
 
 function cloneTaskContext(context: TaskContext | undefined): TaskContext | undefined {
-  return context ? JSON.parse(JSON.stringify(context)) as TaskContext : undefined
+  return context ? (JSON.parse(JSON.stringify(context)) as TaskContext) : undefined
 }
 
 function hasInteractiveSteps(plan: TaskPlan) {

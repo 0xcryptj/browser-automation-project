@@ -102,6 +102,27 @@ function getOverlayRoot() {
           color: #dbeafe;
           font-family: ui-sans-serif, system-ui, sans-serif;
         }
+        @media (prefers-color-scheme: light) {
+          .badge {
+            background: linear-gradient(180deg, rgba(248, 250, 255, 0.97), rgba(240, 245, 255, 0.94));
+            border-color: rgba(96, 165, 250, 0.40);
+            box-shadow: 0 18px 48px rgba(0, 0, 50, 0.14);
+            color: #1e3a5f;
+          }
+          .badge.approval {
+            border-color: rgba(168, 85, 247, 0.42);
+            color: #4a1272;
+          }
+          .eyebrow { color: #2563eb; }
+          .badge.approval .eyebrow { color: #7c3aed; }
+          .subtitle { color: #475569; }
+          .badge.approval .subtitle { color: #6d28d9; }
+          .stop {
+            background: linear-gradient(180deg, rgba(254, 226, 226, 0.90), rgba(254, 202, 202, 0.80));
+            border-color: rgba(239, 68, 68, 0.34);
+            color: #991b1b;
+          }
+        }
         .badge.approval {
           border-color: rgba(168, 85, 247, 0.34);
           color: #f3e8ff;
@@ -255,11 +276,26 @@ function resolveOverlayTarget(payload: OverlayPayload) {
   return null
 }
 
+function handleOverlayKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    clearOverlay()
+  }
+}
+
 function bindOverlayCleanup() {
   if (overlayCleanupBound) return
   overlayCleanupBound = true
   window.addEventListener('scroll', scheduleOverlayRender, true)
   window.addEventListener('resize', scheduleOverlayRender)
+  window.addEventListener('keydown', handleOverlayKeydown, { capture: true })
+
+  // Re-render overlay on SPA navigation so the ring/cursor targets the
+  // correct element in the new DOM (or gracefully falls back to centred badge).
+  const handleNavigation = () => {
+    if (activeOverlayPayload) scheduleOverlayRender()
+  }
+  window.addEventListener('popstate', handleNavigation)
+  window.addEventListener('hashchange', handleNavigation)
 }
 
 function scheduleOverlayRender() {
@@ -371,7 +407,8 @@ function describeAction(actionType?: string) {
   }
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return
   if (message.type === 'COLLECT_CONTEXT') {
     try {
       sendResponse(collectContext(message.options))

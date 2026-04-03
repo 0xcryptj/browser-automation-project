@@ -1,8 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Browser Automation Assistant",
+  "short_name": "AutoAssist",
   "version": "0.1.0",
-  "description": "Local-first AI browser automation - runs entirely on localhost.",
+  "description": "Local-first AI browser automation. All processing runs on your machine via a localhost runner — no data leaves your device.",
+  "homepage_url": "https://github.com/joarb/browser-automation",
   "permissions": [
     "activeTab",
     "nativeMessaging",
@@ -12,10 +14,11 @@
     "tabs"
   ],
   "host_permissions": [
-    "http://localhost/*",
-    "http://127.0.0.1/*",
     "<all_urls>"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -24,6 +27,7 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content-script.js"],
+      "type": "module",
       "run_at": "document_idle"
     }
   ],

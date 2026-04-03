@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
-import type { TaskPlan, TaskResult } from '@browser-automation/shared'
-import { TaskRequest, ApprovalRequest } from '@browser-automation/shared'
+import type { TaskPlan, TaskRequest, TaskResult } from '@browser-automation/shared'
+import { TaskRequest as TaskRequestSchema, ApprovalRequest } from '@browser-automation/shared'
 import { getPlanner } from '../automation/planners/index.js'
 import { execute } from '../automation/executor.js'
 import { taskBus } from '../events/taskBus.js'
@@ -18,6 +18,35 @@ function buildFailedResult(taskPlan: TaskPlan, error: string): TaskResult {
   }
 }
 
+function makePlanningErrorPlan(
+  taskRequest: TaskRequest,
+  plannerName: string,
+  error: string
+): TaskPlan {
+  return {
+    id: taskRequest.id,
+    prompt: taskRequest.prompt,
+    steps: [],
+    context: taskRequest.observation
+      ? {
+          url: taskRequest.url ?? taskRequest.observation.url,
+          title: taskRequest.title ?? taskRequest.observation.title,
+          snapshot: taskRequest.observation.snapshot,
+          text: taskRequest.observation.text,
+          headings: taskRequest.observation.headings,
+          textBlocks: taskRequest.observation.textBlocks?.map((block) => block.text),
+        }
+      : {
+          url: taskRequest.url,
+          title: taskRequest.title,
+        },
+    status: 'failed',
+    summary: `Planning failed: ${error}`,
+    plannerUsed: plannerName,
+    createdAt: Date.now(),
+  }
+}
+
 export async function taskRoutes(server: FastifyInstance) {
   const enqueueExecution = (taskPlan: TaskPlan) => {
     executionQueue = executionQueue
@@ -25,6 +54,10 @@ export async function taskRoutes(server: FastifyInstance) {
         // Keep the queue moving after prior failures.
       })
       .then(async () => {
+        // Mark the plan as running so the store always reflects the true state.
+        // If the process is killed mid-execution, a GET /task/:id will return
+        // status:'running' rather than the stale 'planned' value.
+        planStore.set(taskPlan.id, { ...taskPlan, status: 'running' })
         const result = await execute(taskPlan)
         resultStore.set(result.taskId, result)
         planStore.set(result.plan.id, result.plan)
@@ -53,7 +86,7 @@ export async function taskRoutes(server: FastifyInstance) {
    * Validate → Plan (async, LLM or mock) → Start execution async → return 202 immediately.
    */
   server.post('/task', async (request, reply) => {
-    const parse = TaskRequest.safeParse(request.body)
+    const parse = TaskRequestSchema.safeParse(request.body)
     if (!parse.success) {
       const summary = parse.error.issues
         .slice(0, 4)
@@ -66,7 +99,8 @@ export async function taskRoutes(server: FastifyInstance) {
       return reply.status(400).send({ error: 'Invalid request', detail: summary, issues: parse.error.issues })
     }
 
-    const taskRequest = parse.data
+    // Override client-supplied ID with a server-generated one to prevent collision/hijacking
+    const taskRequest = { ...parse.data, id: crypto.randomUUID() }
     server.log.info(`[task] "${taskRequest.prompt.slice(0, 80)}" (${taskRequest.id})`)
 
     // Plan (may be async LLM call)
@@ -76,28 +110,7 @@ export async function taskRoutes(server: FastifyInstance) {
       taskPlan = await planner.plan(taskRequest)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      taskPlan = {
-        id: taskRequest.id,
-        prompt: taskRequest.prompt,
-        steps: [],
-        context: taskRequest.observation
-          ? {
-              url: taskRequest.url ?? taskRequest.observation.url,
-              title: taskRequest.title ?? taskRequest.observation.title,
-              snapshot: taskRequest.observation.snapshot,
-              text: taskRequest.observation.text,
-              headings: taskRequest.observation.headings,
-              textBlocks: taskRequest.observation.textBlocks?.map((block) => block.text),
-            }
-          : {
-              url: taskRequest.url,
-              title: taskRequest.title,
-            },
-        status: 'failed',
-        summary: `Planning failed: ${msg}`,
-        plannerUsed: planner.name,
-        createdAt: Date.now(),
-      }
+      taskPlan = makePlanningErrorPlan(taskRequest, planner.name, msg)
     }
 
     if (taskPlan.status === 'failed') {
@@ -164,18 +177,32 @@ export async function taskRoutes(server: FastifyInstance) {
    * GET /task/:id/stream
    * Server-Sent Events: streams task execution events in real time.
    * Replays buffered events on connect so late subscribers catch up.
+   * CORS is handled at the server level by @fastify/cors — do NOT add
+   * Access-Control-Allow-Origin here, as that would bypass the origin allow-list.
    */
   server.get<{ Params: { id: string } }>('/task/:id/stream', async (request, reply) => {
     const { id } = request.params
     const res = reply.raw
+    const origin = request.headers.origin
 
-    res.writeHead(200, {
+    const corsHeaders: Record<string, string> = {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': '*',
-    })
+    }
+
+    if (
+      origin &&
+      (origin.startsWith('chrome-extension://') ||
+        origin.startsWith('http://localhost') ||
+        origin.startsWith('http://127.0.0.1'))
+    ) {
+      corsHeaders['Access-Control-Allow-Origin'] = origin
+      corsHeaders['Access-Control-Allow-Credentials'] = 'true'
+    }
+
+    res.writeHead(200, corsHeaders)
 
     const write = (data: unknown) => {
       if (!res.writableEnded && !res.destroyed) {
@@ -209,11 +236,12 @@ export async function taskRoutes(server: FastifyInstance) {
       }
     )
 
-    // Heartbeat
+    // Heartbeat keeps the connection alive through proxies, firewalls, and
+    // browsers (like Brave) that may aggressively close idle connections.
     const heartbeat = setInterval(() => {
       if (res.writableEnded || res.destroyed) { clearInterval(heartbeat); return }
       res.write(': ping\n\n')
-    }, 20_000)
+    }, 15_000)
 
     return new Promise<void>((resolve) => {
       const cleanup = () => { clearInterval(heartbeat); unsubscribe(); resolve() }
@@ -230,6 +258,10 @@ export async function taskRoutes(server: FastifyInstance) {
     const parse = ApprovalRequest.safeParse(request.body)
     if (!parse.success) {
       return reply.status(400).send({ error: 'Invalid approval', issues: parse.error.issues })
+    }
+
+    if (parse.data.taskId !== request.params.id) {
+      return reply.status(400).send({ error: 'taskId mismatch' })
     }
 
     const { approved, stepIndex } = parse.data

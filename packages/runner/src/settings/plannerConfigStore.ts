@@ -139,7 +139,6 @@ export async function getPublicPlannerConfig() {
     baseUrl: resolved.baseUrl,
     hasApiKey: Boolean(resolved.apiKey),
     apiKeyPreview: redactSecret(resolved.apiKey),
-    configPath: getPlannerConfigPath(),
     source: resolved.source,
     ready: resolved.ready,
     warning: resolved.warning,
@@ -158,7 +157,7 @@ function redactSecret(secret?: string) {
 
 async function probeOllama(baseUrl: string, model: string) {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 1800)
+  const timeout = setTimeout(() => controller.abort(), 5000)
 
   try {
     const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/tags`, {

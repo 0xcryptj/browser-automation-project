@@ -131,6 +131,10 @@ internal static class BrowserAutomationNativeHost
 
     private static Dictionary<string, object> EnsureRunner(string runnerBaseUrl)
     {
+        var uri = new Uri(runnerBaseUrl);
+        if (uri.Host != "127.0.0.1" && uri.Host != "localhost")
+            throw new InvalidOperationException("runnerBaseUrl must point to localhost");
+
         try
         {
             var health = FetchJson(string.Format("{0}/health", TrimTrailingSlash(runnerBaseUrl)));

@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
-import { copyFileSync, cpSync, existsSync, mkdirSync } from 'fs'
+import { copyFileSync, mkdirSync } from 'fs'
 
 function copyExtensionAssets() {
   return {
@@ -10,14 +10,15 @@ function copyExtensionAssets() {
       const distDir = resolve(__dirname, 'dist')
       const manifestSource = resolve(__dirname, 'manifest.json')
       const manifestTarget = resolve(distDir, 'manifest.json')
-      const iconsSource = resolve(__dirname, 'icons')
       const iconsTarget = resolve(distDir, 'icons')
 
       mkdirSync(distDir, { recursive: true })
+      mkdirSync(iconsTarget, { recursive: true })
       copyFileSync(manifestSource, manifestTarget)
 
-      if (existsSync(iconsSource)) {
-        cpSync(iconsSource, iconsTarget, { recursive: true })
+      // Copy only the three required icon files (exclude scratch/comparison images)
+      for (const icon of ['icon16.png', 'icon48.png', 'icon128.png']) {
+        copyFileSync(resolve(__dirname, 'icons', icon), resolve(iconsTarget, icon))
       }
     },
   }
@@ -25,7 +26,6 @@ function copyExtensionAssets() {
 
 export default defineConfig({
   base: './',
-  assetsInclude: ['**/*.PNG'],
   plugins: [react(), copyExtensionAssets()],
   build: {
     target: 'chrome112',

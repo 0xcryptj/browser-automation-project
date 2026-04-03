@@ -2,14 +2,17 @@
   "name": "browser-automation",
   "private": true,
   "scripts": {
-    "dev": "pnpm --filter runner dev",
+    "dev": "pnpm --filter @browser-automation/runner dev",
     "runner:dev": "pnpm --filter @browser-automation/runner dev",
     "runner:start": "pnpm --filter @browser-automation/runner start",
+    "runner:start:source": "pnpm --filter @browser-automation/runner start:source",
     "runner:build": "pnpm --filter @browser-automation/runner build",
     "extension:dev": "pnpm --filter @browser-automation/extension dev",
     "extension:build": "pnpm --filter @browser-automation/extension build",
     "typecheck": "pnpm --filter @browser-automation/shared build && pnpm --filter @browser-automation/runner typecheck && pnpm exec tsc --noEmit -p packages/extension/tsconfig.json",
-    "build": "pnpm run typecheck && pnpm run runner:build && pnpm --filter @browser-automation/extension build",
+    "build": "pnpm run runner:build && pnpm --filter @browser-automation/extension build",
+    "build:clean": "pnpm run clean && pnpm run build",
+    "clean": "node -e \"require('fs').rmSync('packages/runner/dist',{recursive:true,force:true}); require('fs').rmSync('packages/extension/dist',{recursive:true,force:true}); require('fs').rmSync('packages/shared/dist',{recursive:true,force:true});\"",
     "install:playwright": "pnpm --filter @browser-automation/runner exec playwright install chromium"
   },
   "devDependencies": {

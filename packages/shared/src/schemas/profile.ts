@@ -123,21 +123,3 @@ export const ImportantInfoExtraction = z.object({
   extractedAt: z.number().default(() => Date.now()),
 })
 export type ImportantInfoExtraction = z.infer<typeof ImportantInfoExtraction>
-
-// ── Planner & Runner Config (for shared reference) ────────────────────────────
-
-export const PlannerConfig = z.object({
-  provider: z.enum(['mock', 'anthropic', 'openai']).default('mock'),
-  model: z.string().optional(),
-  maxSteps: z.number().int().min(1).max(30).default(15),
-})
-export type PlannerConfig = z.infer<typeof PlannerConfig>
-
-export const RunnerConfig = z.object({
-  host: z.string().default('127.0.0.1'),
-  port: z.number().int().default(3000),
-  headless: z.boolean().default(false),
-  slowMo: z.number().int().default(60),
-  planner: PlannerConfig.default({}),
-})
-export type RunnerConfig = z.infer<typeof RunnerConfig>

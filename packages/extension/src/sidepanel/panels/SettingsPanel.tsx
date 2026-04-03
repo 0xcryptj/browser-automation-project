@@ -586,10 +586,11 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
           width: 34,
           height: 20,
           borderRadius: 999,
-          background: value ? '#2563eb' : 'var(--surface)',
+          background: value ? 'var(--button-grad)' : 'var(--surface)',
           position: 'relative',
           flexShrink: 0,
           border: '1px solid var(--border)',
+          transition: 'background 0.2s',
         }}
       >
         <div
@@ -649,6 +650,8 @@ function InfoPanel({ children }: { children: React.ReactNode }) {
         lineHeight: 1.55,
         padding: '10px 12px',
         wordBreak: 'break-word',
+        backdropFilter: 'blur(18px)',
+        WebkitBackdropFilter: 'blur(18px)',
       }}
     >
       {children}
@@ -694,14 +697,15 @@ const buttonRowStyle: CSSProperties = {
 }
 
 const primaryButtonStyle: CSSProperties = {
-  background: '#2563eb',
-  border: 'none',
+  background: 'var(--button-grad)',
+  border: '1px solid rgba(255,255,255,0.22)',
   borderRadius: 999,
   color: '#ffffff',
   fontSize: 12,
   fontWeight: 600,
   padding: '9px 14px',
   cursor: 'pointer',
+  transition: 'opacity 0.15s',
 }
 
 const secondaryButtonStyle: CSSProperties = {

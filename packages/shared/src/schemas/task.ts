@@ -6,9 +6,15 @@ import { CompactPageSnapshot, PageObservation } from './observation.ts'
 
 export const TaskRequest = z.object({
   id: z.string(),
-  prompt: z.string().min(1),
+  prompt: z.string().min(1).max(4000),
   mode: z.enum(['standard', 'assist']).default('standard'),
-  url: z.string().url().optional(),
+  url: z
+    .string()
+    .url()
+    .refine((u) => u.startsWith('http://') || u.startsWith('https://'), {
+      message: 'Only http/https URLs are allowed',
+    })
+    .optional(),
   title: z.string().optional(),
   observation: PageObservation.optional(),
 })
@@ -67,21 +73,10 @@ export const TaskPlan = z.object({
   context: TaskContext.optional(),
   status: z.enum(['planned', 'running', 'done', 'failed', 'awaiting_approval', 'cancelled']),
   summary: z.string().optional(),
-  plannerUsed: z.string().optional(), // e.g. 'mock', 'anthropic/claude-opus-4-6'
+  plannerUsed: z.string().optional(), // e.g. 'mock', 'anthropic/claude-opus-4-5'
   createdAt: z.number(),
 })
 export type TaskPlan = z.infer<typeof TaskPlan>
-
-// ── Execution session ─────────────────────────────────────────────────────────
-
-export const ExecutionSession = z.object({
-  sessionId: z.string(),
-  tasks: z.array(z.string()),  // task IDs
-  startedAt: z.number(),
-  endedAt: z.number().optional(),
-  status: z.enum(['active', 'completed', 'aborted']).default('active'),
-})
-export type ExecutionSession = z.infer<typeof ExecutionSession>
 
 // ── Result ────────────────────────────────────────────────────────────────────
 

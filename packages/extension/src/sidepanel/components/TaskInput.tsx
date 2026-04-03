@@ -68,8 +68,10 @@ export function TaskInput({ onSubmit, disabled, compact = false }: Props) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder={compact ? 'Ask quietly...' : 'Ask anything…'}
+          placeholder={compact ? 'Ask quietly...' : 'Ask anything — read, click, type, automate…'}
           rows={compact ? 1 : 3}
+          aria-label="Task prompt"
+          aria-disabled={disabled}
           style={{
             resize: compact ? 'none' : 'vertical',
             background: 'transparent',
@@ -82,12 +84,16 @@ export function TaskInput({ onSubmit, disabled, compact = false }: Props) {
             outline: 'none',
             fontFamily: 'inherit',
             minHeight: compact ? 34 : undefined,
+            opacity: disabled ? 0.55 : 1,
+            cursor: disabled ? 'not-allowed' : 'text',
+            transition: 'opacity 150ms ease',
           }}
         />
 
         <button
           onClick={handleSubmit}
           disabled={!canSubmit}
+          aria-label={disabled ? 'Task is running' : canSubmit ? 'Run task' : 'Enter a task to run'}
           style={{
             width: compact ? 34 : 38,
             height: compact ? 34 : 38,
@@ -100,12 +106,13 @@ export function TaskInput({ onSubmit, disabled, compact = false }: Props) {
             border: `1px solid ${canSubmit ? 'rgba(255,255,255,0.24)' : 'var(--glass-border)'}`,
             borderRadius: '50%',
             cursor: canSubmit ? 'pointer' : 'not-allowed',
-            transition: 'all 120ms ease',
+            transition: 'background 120ms ease, box-shadow 120ms ease, color 120ms ease',
             boxShadow: canSubmit ? '0 14px 28px rgba(49,102,255,0.24), inset 0 1px 0 rgba(255,255,255,0.28)' : 'none',
             flexShrink: 0,
             backdropFilter: 'blur(18px)',
+            opacity: !canSubmit && !disabled ? 0.5 : 1,
           }}
-          title={disabled ? 'Task running' : 'Run task'}
+          title={disabled ? 'Task running' : 'Run task (Enter)'}
         >
           <SendIcon size={14} />
         </button>
@@ -161,6 +168,7 @@ const iconButtonStyle = {
   alignItems: 'center',
   justifyContent: 'center',
   flexShrink: 0,
+  cursor: 'pointer',
 }
 
 const keycapStyle = {

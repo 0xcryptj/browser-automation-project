@@ -45,14 +45,14 @@ export const Action = z.object({
   type: ActionType,
 
   // Navigation
-  url: z.string().url().nullish(),
+  url: z.string().url().refine((u) => u.startsWith('http://') || u.startsWith('https://'), { message: 'Only http/https URLs are allowed' }).nullish(),
 
   // Element targeting
   elementRef: z.string().nullish(),
   selector: z.string().nullish(),
 
   // Input / value
-  value: z.string().nullish(),
+  value: z.string().max(10000).nullish(),
 
   // Keyboard
   key: z.string().nullish(),

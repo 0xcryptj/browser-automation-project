@@ -263,10 +263,6 @@ export default function App() {
         if (!booted) return
       }
 
-      if (runnerHealth?.browserTarget?.mode === 'attach' && !runnerHealth.browserTarget.ready) {
-        setLauncherError(null)
-      }
-
       setTab('tasks')
       setMenuOpen(false)
       const requiresContext = needsCurrentPageContext(prompt)
@@ -428,6 +424,7 @@ export default function App() {
             onClick={() => void checkRunner()}
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
             title="Check runner connection"
+            aria-label={`Runner status: ${runnerStatus}. Click to recheck.`}
           >
             <StatusBadge status={runnerStatus} />
           </button>
@@ -436,6 +433,9 @@ export default function App() {
             onClick={() => setMenuOpen((open) => !open)}
             style={menuButtonStyle}
             title="Open menu"
+            aria-label="Open navigation menu"
+            aria-expanded={menuOpen}
+            aria-haspopup="true"
           >
             <HamburgerIcon />
           </button>
@@ -460,10 +460,16 @@ export default function App() {
           <>
             <div
               onClick={() => setMenuOpen(false)}
+              onKeyDown={(e) => e.key === 'Escape' && setMenuOpen(false)}
+              role="button"
+              tabIndex={-1}
+              aria-label="Close menu"
               style={{
                 position: 'absolute',
                 inset: 0,
                 background: 'rgba(0,0,0,0.22)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
                 zIndex: 20,
               }}
             />
@@ -491,30 +497,33 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ padding: 8 }}>
+              <nav role="menu" style={{ padding: 8 }}>
                 {visibleNavItems.map((item) => (
                   <button
                     key={item.id}
+                    role="menuitem"
                     onClick={() => {
                       setTab(item.id)
                       setMenuOpen(false)
                     }}
+                    aria-current={item.id === tab ? 'page' : undefined}
                     style={{
                       width: '100%',
                       textAlign: 'left',
                       background: item.id === tab ? 'var(--panel-soft)' : 'transparent',
-                      border: '1px solid transparent',
+                      border: `1px solid ${item.id === tab ? 'var(--glass-border)' : 'transparent'}`,
                       borderRadius: 14,
                       padding: '10px 11px',
                       cursor: 'pointer',
                       marginBottom: 4,
+                      transition: 'background 0.15s, border-color 0.15s',
                     }}
                   >
                     <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>{item.label}</div>
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>{item.description}</div>
                   </button>
                 ))}
-              </div>
+              </nav>
 
               {isQuizMode && (
                 <div style={{ padding: '0 14px 10px' }}>
@@ -1199,10 +1208,4 @@ const lightThemeVars: CSSProperties = {
   ['--glass-blur' as string]: 'blur(56px) saturate(1.8) brightness(1.01)',
 }
 
-function formatRunnerDetails(health: Awaited<ReturnType<typeof runnerClient.health>>) {
-  if (health.status !== 'ok') {
-    return 'Offline'
-  }
 
-  return 'Connected'
-}

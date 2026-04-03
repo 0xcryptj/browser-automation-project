@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { TaskResult } from '@browser-automation/shared'
 import { StatusBadge } from './StatusBadge.js'
 
@@ -22,37 +23,82 @@ function ActionIcon({ type }: { type: string }) {
   return <span style={{ fontSize: 14 }}>{icons[type] ?? '▸'}</span>
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // clipboard unavailable
+    }
+  }
+
+  return (
+    <button
+      onClick={() => void handleCopy()}
+      aria-label={copied ? 'Copied' : 'Copy result'}
+      title={copied ? 'Copied!' : 'Copy to clipboard'}
+      style={{
+        background: 'var(--glass-button)',
+        border: '1px solid var(--glass-border)',
+        borderRadius: 8,
+        color: copied ? '#22c55e' : 'var(--muted)',
+        fontSize: 10,
+        fontWeight: 600,
+        padding: '3px 7px',
+        cursor: 'pointer',
+        flexShrink: 0,
+        transition: 'color 150ms ease',
+      }}
+    >
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  )
+}
+
 export function ResultDisplay({ result }: Props) {
   const { plan, observation, durationMs } = result
   const screenshots = plan.steps
     .filter((s) => s.screenshot)
     .map((s) => s.screenshot!)
 
+  // Collect all extract results for top-level copy
+  const extractResults = plan.steps
+    .filter((s) => s.status === 'done' && s.result)
+    .map((s) => s.result!)
+    .filter(Boolean)
+  const copyableResult = extractResults.join('\n\n')
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Header */}
       <div
         style={{
-          background: '#1e1e2e',
-          border: '1px solid #313150',
-          borderRadius: 8,
+          background: 'var(--panel)',
+          border: '1px solid var(--glass-border)',
+          borderRadius: 16,
           padding: '10px 12px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 8,
+          backdropFilter: 'blur(20px)',
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 3 }}>Task Result</div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>Task Result</div>
           <div
             style={{
               fontSize: 12,
-              color: '#e2e8f0',
+              color: 'var(--text)',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
             }}
+            title={plan.prompt}
           >
             {plan.prompt}
           </div>
@@ -60,7 +106,9 @@ export function ResultDisplay({ result }: Props) {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
           <StatusBadge status={plan.status} />
           {durationMs !== undefined && (
-            <span style={{ fontSize: 10, color: '#64748b' }}>{(durationMs / 1000).toFixed(1)}s</span>
+            <span style={{ fontSize: 10, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+              {(durationMs / 1000).toFixed(1)}s
+            </span>
           )}
         </div>
       </div>
@@ -71,21 +119,22 @@ export function ResultDisplay({ result }: Props) {
           <div
             key={i}
             style={{
-              background: '#1a1a2a',
+              background: 'var(--panel)',
               border: `1px solid ${
                 step.status === 'done'
-                  ? '#22c55e33'
+                  ? 'rgba(34,197,94,0.22)'
                   : step.status === 'failed'
-                  ? '#ef444433'
+                  ? 'rgba(239,68,68,0.22)'
                   : step.status === 'awaiting_approval'
-                  ? '#a855f733'
-                  : '#313150'
+                  ? 'rgba(168,85,247,0.22)'
+                  : 'var(--glass-border)'
               }`,
-              borderRadius: 6,
+              borderRadius: 12,
               padding: '8px 10px',
               display: 'flex',
               alignItems: 'flex-start',
               gap: 8,
+              backdropFilter: 'blur(18px)',
             }}
           >
             <ActionIcon type={step.action.type} />
@@ -93,11 +142,12 @@ export function ResultDisplay({ result }: Props) {
               <div
                 style={{
                   fontSize: 12,
-                  color: '#e2e8f0',
-                  whiteSpace: 'nowrap',
+                  color: 'var(--text)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
+                title={step.action.description}
               >
                 {step.action.description}
               </div>
@@ -105,18 +155,33 @@ export function ResultDisplay({ result }: Props) {
                 <div
                   style={{
                     fontSize: 11,
-                    color: '#64748b',
+                    color: 'var(--text-soft)',
                     marginTop: 2,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    maxHeight: 120,
+                    overflowY: 'auto',
                   }}
                 >
                   {step.result}
                 </div>
               )}
               {step.error && (
-                <div style={{ fontSize: 11, color: '#ef4444', marginTop: 2 }}>{step.error}</div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--danger)',
+                    marginTop: 4,
+                    padding: '5px 7px',
+                    background: 'var(--danger-bg)',
+                    border: '1px solid var(--danger-border)',
+                    borderRadius: 8,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {step.error}
+                </div>
               )}
             </div>
             <StatusBadge status={step.status} />
@@ -124,20 +189,54 @@ export function ResultDisplay({ result }: Props) {
         ))}
       </div>
 
+      {/* Copy result button if there are extract results */}
+      {copyableResult && (
+        <div
+          style={{
+            padding: '10px 12px',
+            background: 'var(--panel)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 14,
+            backdropFilter: 'blur(20px)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>Extracted result</span>
+            <CopyButton text={copyableResult} />
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: 'var(--text-soft)',
+              lineHeight: 1.6,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 200,
+              overflowY: 'auto',
+            }}
+          >
+            {copyableResult}
+          </div>
+        </div>
+      )}
+
       {/* Screenshot */}
       {screenshots.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+          <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>
             Final Screenshot
           </div>
           <img
             src={`data:image/png;base64,${screenshots[screenshots.length - 1]}`}
-            alt="Page screenshot"
+            alt="Final page screenshot captured during task"
             style={{
               width: '100%',
-              borderRadius: 6,
-              border: '1px solid #313150',
+              borderRadius: 10,
+              border: '1px solid var(--glass-border)',
               display: 'block',
+              maxHeight: 360,
+              objectFit: 'contain',
+              background: 'var(--surface)',
             }}
           />
         </div>
@@ -147,16 +246,25 @@ export function ResultDisplay({ result }: Props) {
       {observation && (
         <div
           style={{
-            background: '#1a1a2a',
-            border: '1px solid #313150',
-            borderRadius: 6,
+            background: 'var(--panel)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 10,
             padding: '8px 10px',
             fontSize: 11,
-            color: '#64748b',
+            color: 'var(--muted)',
+            backdropFilter: 'blur(18px)',
+            overflow: 'hidden',
           }}
         >
-          <span style={{ color: '#94a3b8', fontWeight: 600 }}>Final URL: </span>
-          <span style={{ color: '#6366f1' }}>{observation.url}</span>
+          <span style={{ color: 'var(--text-soft)', fontWeight: 600 }}>Final URL: </span>
+          <span
+            style={{
+              color: '#6366f1',
+              wordBreak: 'break-all',
+            }}
+          >
+            {observation.url}
+          </span>
         </div>
       )}
 
@@ -164,12 +272,14 @@ export function ResultDisplay({ result }: Props) {
       {result.error && (
         <div
           style={{
-            background: '#1a0a0a',
-            border: '1px solid #ef444433',
-            borderRadius: 6,
+            background: 'var(--danger-bg)',
+            border: '1px solid var(--danger-border)',
+            borderRadius: 10,
             padding: '8px 10px',
             fontSize: 12,
-            color: '#ef4444',
+            color: 'var(--danger)',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
           }}
         >
           {result.error}
