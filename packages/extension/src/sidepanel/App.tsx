@@ -6,7 +6,6 @@ import { useTaskStream } from './hooks/useTaskStream.js'
 import { TaskInput } from './components/TaskInput.js'
 import { LiveTaskView } from './components/LiveTaskView.js'
 import { ApprovalModal } from './components/ApprovalModal.js'
-import { StatusBadge } from './components/StatusBadge.js'
 import { FutureLoginScreen } from './components/FutureLoginScreen.js'
 import { AssistPanel } from './panels/AssistPanel.js'
 import { TaskHistory } from './panels/TaskHistory.js'
@@ -26,17 +25,17 @@ type ActiveTabInfo = {
 }
 
 const NAV_ITEMS: Array<{ id: Tab; label: string; description: string }> = [
-  { id: 'tasks', label: 'Tasks', description: 'Run browser actions and ask follow-up questions.' },
-  { id: 'assist', label: 'Assist', description: 'Summaries, dates, warnings, and next steps.' },
-  { id: 'observe', label: 'Observe', description: 'Inspect the current page snapshot and refs.' },
-  { id: 'history', label: 'History', description: 'Rerun or review recent tasks.' },
-  { id: 'settings', label: 'Settings', description: 'Runner, browser target, provider, and profile.' },
+  { id: 'tasks', label: 'Tasks', description: 'Automate and ask questions.' },
+  { id: 'assist', label: 'Assist', description: 'Page insights and next steps.' },
+  { id: 'observe', label: 'Observe', description: 'Page snapshot.' },
+  { id: 'history', label: 'History', description: 'Recent tasks.' },
+  { id: 'settings', label: 'Settings', description: 'Connection and provider.' },
 ]
 
 const EXAMPLE_PROMPTS = [
-  'Draft a professional email reply',
-  'Create a project timeline from my notes',
-  'Summarize this page and tell me the next steps',
+  'Summarize this page',
+  'Fill out this form',
+  'Go to example.com',
 ]
 
 export default function App() {
@@ -323,15 +322,6 @@ export default function App() {
         state.status === 'submitting' ||
         state.status === 'planning')
     )
-  const orbState =
-    runnerStatus !== 'connected'
-      ? 'offline'
-      : runnerHealth?.browserTarget?.mode === 'attach' && runnerHealth.browserTarget.activeMode === 'attach'
-        ? 'attached'
-        : runnerHealth?.browserTarget?.mode === 'attach' && runnerHealth.browserTarget.activeMode === 'launch'
-          ? 'warning'
-          : 'online'
-
   return (
     <div
       style={{
@@ -351,52 +341,39 @@ export default function App() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '12px 14px',
-          borderBottom: '1px solid var(--glass-border)',
+          padding: '10px 14px',
+          borderBottom: '1px solid var(--border)',
           flexShrink: 0,
           background: 'var(--header-bg)',
-          backdropFilter: 'var(--glass-blur)',
-          WebkitBackdropFilter: 'var(--glass-blur)',
-          boxShadow: '0 12px 32px rgba(0,0,0,0.12)',
+          backdropFilter: 'blur(20px) saturate(1.5)',
+          WebkitBackdropFilter: 'blur(20px) saturate(1.5)',
           position: 'relative',
           zIndex: 1,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          {activeTab?.faviconUrl ? (
-            <img
-              src={activeTab.faviconUrl}
-              alt=""
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <button
+            onClick={() => void checkRunner()}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+            title={runnerStatus}
+          >
+            <span
               style={{
-                width: 16,
-                height: 16,
-                borderRadius: 4,
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: runnerStatus === 'connected' ? '#34d399' : runnerStatus === 'checking' ? '#94a3b8' : '#ef4444',
                 flexShrink: 0,
+                animation: runnerStatus === 'checking' ? 'pulse 1.4s ease-in-out infinite' : undefined,
               }}
             />
-          ) : (
-            <div
-              style={{
-                width: 16,
-                height: 16,
-                borderRadius: 4,
-                background: 'var(--panel-soft)',
-                border: '1px solid var(--glass-border)',
-                flexShrink: 0,
-              }}
-            />
-          )}
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {activeTab?.title || 'Browser Operator'}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {activeTab?.hostname || 'Ready'}
-            </div>
-          </div>
+          </button>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {activeTab?.hostname || 'AutoAssist'}
+          </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {isQuizMode && (
             <button
               onClick={async () => {
@@ -408,7 +385,7 @@ export default function App() {
                 await saveSettings(next)
               }}
               style={menuButtonStyle}
-              title={isQuizCollapsed ? 'Expand quiz mode' : 'Collapse quiz mode'}
+              title={isQuizCollapsed ? 'Expand' : 'Collapse'}
             >
               {isQuizCollapsed ? <ExpandIcon /> : <CollapseIcon />}
             </button>
@@ -416,24 +393,15 @@ export default function App() {
 
           {tab === 'tasks' && isRunning && (
             <button onClick={() => void cancel()} style={dangerButtonStyle}>
-              Cancel
+              Stop
             </button>
           )}
 
           <button
-            onClick={() => void checkRunner()}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-            title="Check runner connection"
-            aria-label={`Runner status: ${runnerStatus}. Click to recheck.`}
-          >
-            <StatusBadge status={runnerStatus} />
-          </button>
-
-          <button
             onClick={() => setMenuOpen((open) => !open)}
             style={menuButtonStyle}
-            title="Open menu"
-            aria-label="Open navigation menu"
+            title="Menu"
+            aria-label="Menu"
             aria-expanded={menuOpen}
             aria-haspopup="true"
           >
@@ -481,19 +449,16 @@ export default function App() {
                 width: 280,
                 maxWidth: 'calc(100% - 20px)',
                 background: 'var(--panel)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: 20,
+                border: '1px solid var(--border)',
+                borderRadius: 12,
                 boxShadow: 'var(--shadow)',
                 zIndex: 21,
                 overflow: 'hidden',
-                backdropFilter: 'var(--glass-blur)',
-                WebkitBackdropFilter: 'var(--glass-blur)',
               }}
             >
-              <div style={{ padding: 14, borderBottom: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Menu</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                  {`${activeTab?.title || 'Current page'} · ${runnerStatus === 'connected' ? 'Connected' : runnerStatus === 'disconnected' ? 'Offline' : 'Checking'}`}
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
+                  {activeTab?.hostname || 'AutoAssist'}
                 </div>
               </div>
 
@@ -511,8 +476,8 @@ export default function App() {
                       width: '100%',
                       textAlign: 'left',
                       background: item.id === tab ? 'var(--panel-soft)' : 'transparent',
-                      border: `1px solid ${item.id === tab ? 'var(--glass-border)' : 'transparent'}`,
-                      borderRadius: 14,
+                      border: `1px solid ${item.id === tab ? 'var(--border)' : 'transparent'}`,
+                      borderRadius: 8,
                       padding: '10px 11px',
                       cursor: 'pointer',
                       marginBottom: 4,
@@ -587,7 +552,7 @@ export default function App() {
         <div
           style={{
             height: '100%',
-            overflow: 'hidden',
+            overflowY: 'auto',
             padding: 14,
           }}
         >
@@ -636,9 +601,9 @@ export default function App() {
                           flexDirection: 'column',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: 18,
-                          padding: '36px 10px 18px',
-                          minHeight: 320,
+                          gap: 16,
+                          padding: '28px 10px 14px',
+                          minHeight: 240,
                         }}
                       >
                         <div
@@ -652,12 +617,12 @@ export default function App() {
                           }}
                         >
                           <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.03em' }}>
-                            {isQuizMode ? 'Quiz mode' : 'Ask anything'}
+                            {isQuizMode ? 'Quiz mode' : 'What can I help with?'}
                           </div>
                           <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--muted)' }}>
                             {isQuizMode
-                              ? 'Keep the panel discreet while you practice. Ask for hints, quick explanations, or short page summaries.'
-                              : 'Use it like a strong everyday assistant, or have it handle grounded browser tasks on the page you are on.'}
+                              ? 'Discreet assistance while you practice.'
+                              : 'Read, click, type, and automate in your browser.'}
                           </div>
                         </div>
 
@@ -670,15 +635,13 @@ export default function App() {
                               disabled={isRunning || runnerStatus !== 'connected'}
                               style={{
                                 background: 'var(--panel)',
-                                border: '1px solid var(--glass-border)',
-                                borderRadius: 999,
+                                border: '1px solid var(--border)',
+                                borderRadius: 8,
                                 color: 'var(--text-soft)',
                                 fontSize: 12,
-                                padding: '9px 12px',
+                                padding: '8px 12px',
                                 cursor: isRunning || runnerStatus !== 'connected' ? 'not-allowed' : 'pointer',
                                 textAlign: 'left',
-                                boxShadow: 'var(--glass-shadow-soft)',
-                                backdropFilter: 'blur(16px) saturate(1.2)',
                               }}
                             >
                               {examplePrompt}
@@ -696,12 +659,8 @@ export default function App() {
                 style={{
                   flexShrink: 0,
                   margin: '0 -14px -14px',
-                  padding: '14px',
-                  paddingTop: 10,
-                  background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, color-mix(in srgb, var(--bg) 72%, transparent) 16%, var(--bg) 100%)',
-                  backdropFilter: 'var(--glass-blur)',
-                  WebkitBackdropFilter: 'var(--glass-blur)',
-                  borderTop: '1px solid color-mix(in srgb, var(--glass-border) 70%, transparent)',
+                  padding: '10px 14px 14px',
+                  borderTop: '1px solid var(--border)',
                 }}
               >
                 <TaskInput
@@ -801,37 +760,27 @@ function ConnectionCard({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 14,
-        padding: '18px 16px',
+        gap: 12,
+        padding: '14px',
         background: 'var(--panel)',
-        border: '1px solid var(--glass-border)',
-        borderRadius: 24,
-        boxShadow: 'var(--shadow-soft)',
-        backdropFilter: 'var(--glass-blur)',
-        WebkitBackdropFilter: 'var(--glass-blur)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
       } as React.CSSProperties}
     >
       {runnerStarting ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <LoadingPulse />
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em' }}>
-              Starting up
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-              Your assistant is getting ready
-            </div>
-          </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Starting...</div>
         </div>
       ) : (
         <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em', marginBottom: 4 }}>
-            {isSetupNeeded ? 'Setup required' : 'Not connected'}
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
+            {isSetupNeeded ? 'Setup required' : 'Offline'}
           </div>
-          <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--muted)' }}>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
             {isSetupNeeded
-              ? 'A one-time setup is needed to enable automatic startup. Run the setup command in your project folder, then click Try again.'
-              : "Your local assistant isn't running yet. Click Connect to start it."}
+              ? 'Run the setup command, then try again.'
+              : 'Runner not detected.'}
           </div>
         </div>
       )}
@@ -940,13 +889,10 @@ function CompactQuizView({
     >
       <div
         style={{
-          padding: '16px 14px',
+          padding: '14px 12px',
           background: 'var(--panel)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: 22,
-          boxShadow: 'var(--glass-shadow-soft)',
-          backdropFilter: 'var(--glass-blur)',
-        WebkitBackdropFilter: 'var(--glass-blur)',
+          border: '1px solid var(--border)',
+          borderRadius: 12,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -973,10 +919,10 @@ function CompactQuizView({
             (launcherError
               ? launcherError
               : state.status === 'planning'
-                ? 'Preparing a quick answer...'
+                ? 'Thinking...'
                 : state.status === 'streaming'
-                  ? 'Working quietly in the background...'
-                  : 'Ask for a hint, a short summary, or a quick explanation.')}
+                  ? 'Working...'
+                  : 'Ask a question.')}
         </div>
       </div>
 
@@ -1105,107 +1051,98 @@ const menuButtonStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  width: 34,
-  height: 34,
+  width: 30,
+  height: 30,
   background: 'var(--glass-button)',
-  border: '1px solid var(--glass-border)',
-  borderRadius: 14,
-  color: 'var(--text)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  color: 'var(--muted)',
   cursor: 'pointer',
-  backdropFilter: 'var(--glass-blur)',
-  WebkitBackdropFilter: 'var(--glass-blur)',
-  boxShadow: 'var(--glass-shadow-soft)',
 }
 
 const secondaryButtonStyle: CSSProperties = {
   alignSelf: 'flex-start',
   background: 'var(--glass-button)',
-  border: '1px solid var(--glass-border)',
-  borderRadius: 999,
+  border: '1px solid var(--border)',
+  borderRadius: 8,
   color: 'var(--text)',
-  fontSize: 11,
-  padding: '8px 12px',
+  fontSize: 12,
+  padding: '7px 12px',
   cursor: 'pointer',
-  backdropFilter: 'var(--glass-blur)',
-  WebkitBackdropFilter: 'var(--glass-blur)',
-  boxShadow: 'var(--glass-shadow-soft)',
 }
 
 const primaryPillStyle: CSSProperties = {
   background: 'var(--button-grad)',
-  border: '1px solid rgba(255,255,255,0.22)',
-  borderRadius: 999,
+  border: 'none',
+  borderRadius: 8,
   color: '#ffffff',
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 600,
-  padding: '9px 14px',
+  padding: '8px 16px',
   cursor: 'pointer',
-  boxShadow: '0 14px 30px rgba(49,102,255,0.22), inset 0 1px 0 rgba(255,255,255,0.28)',
-  backdropFilter: 'var(--glass-blur)',
-  WebkitBackdropFilter: 'var(--glass-blur)',
 }
 
 const dangerButtonStyle: CSSProperties = {
-  background: 'color-mix(in srgb, var(--panel) 62%, transparent)',
+  background: 'var(--danger-bg)',
   border: '1px solid var(--danger-border)',
-  borderRadius: 999,
+  borderRadius: 8,
   color: 'var(--danger)',
-  fontSize: 11,
-  padding: '5px 10px',
+  fontSize: 12,
+  fontWeight: 500,
+  padding: '4px 10px',
   cursor: 'pointer',
-  backdropFilter: 'blur(14px)',
 }
 
 const darkThemeVars: CSSProperties = {
-  ['--bg' as string]: '#08090f',
-  ['--header-bg' as string]: 'rgba(10,11,18,0.82)',
-  ['--panel' as string]: 'rgba(22,27,42,0.54)',
-  ['--panel-soft' as string]: 'rgba(32,38,56,0.42)',
-  ['--surface' as string]: 'rgba(15,18,30,0.68)',
+  ['--bg' as string]: '#000000',
+  ['--header-bg' as string]: 'rgba(0,0,0,0.72)',
+  ['--panel' as string]: 'rgba(28,28,30,0.80)',
+  ['--panel-soft' as string]: 'rgba(44,44,46,0.60)',
+  ['--surface' as string]: 'rgba(28,28,30,0.90)',
   ['--border' as string]: 'rgba(255,255,255,0.08)',
-  ['--glass-border' as string]: 'rgba(255,255,255,0.12)',
-  ['--glass-button' as string]: 'rgba(255,255,255,0.08)',
-  ['--button-grad' as string]: 'linear-gradient(160deg, rgba(140,185,255,0.98) 0%, rgba(65,125,255,0.88) 100%)',
-  ['--text' as string]: '#f2f5fa',
-  ['--text-soft' as string]: '#c4cdd9',
-  ['--muted' as string]: '#636d7a',
-  ['--shadow' as string]: '0 28px 64px rgba(0,0,0,0.32)',
-  ['--shadow-soft' as string]: '0 18px 40px rgba(0,0,0,0.18)',
-  ['--glass-shadow-soft' as string]: '0 12px 32px rgba(0,0,0,0.16)',
-  ['--scrollbar' as string]: '#1a1f2b',
-  ['--danger' as string]: '#ff6b6b',
-  ['--danger-bg' as string]: 'rgba(80,14,20,0.32)',
-  ['--danger-border' as string]: 'rgba(255,80,80,0.18)',
-  ['--warning' as string]: '#fbbf24',
-  ['--warning-bg' as string]: 'rgba(80,58,10,0.28)',
-  ['--warning-border' as string]: 'rgba(251,191,36,0.18)',
-  ['--glass-blur' as string]: 'blur(56px) saturate(2) brightness(1.02)',
+  ['--glass-border' as string]: 'rgba(255,255,255,0.10)',
+  ['--glass-button' as string]: 'rgba(255,255,255,0.06)',
+  ['--button-grad' as string]: 'linear-gradient(180deg, #0a84ff 0%, #0070e0 100%)',
+  ['--text' as string]: '#f5f5f7',
+  ['--text-soft' as string]: '#a1a1a6',
+  ['--muted' as string]: '#6e6e73',
+  ['--shadow' as string]: '0 4px 16px rgba(0,0,0,0.40)',
+  ['--shadow-soft' as string]: '0 2px 8px rgba(0,0,0,0.20)',
+  ['--glass-shadow-soft' as string]: '0 1px 4px rgba(0,0,0,0.12)',
+  ['--scrollbar' as string]: '#2c2c2e',
+  ['--danger' as string]: '#ff453a',
+  ['--danger-bg' as string]: 'rgba(255,69,58,0.12)',
+  ['--danger-border' as string]: 'rgba(255,69,58,0.20)',
+  ['--warning' as string]: '#ffd60a',
+  ['--warning-bg' as string]: 'rgba(255,214,10,0.10)',
+  ['--warning-border' as string]: 'rgba(255,214,10,0.18)',
+  ['--glass-blur' as string]: 'blur(20px) saturate(1.8)',
 }
 
 const lightThemeVars: CSSProperties = {
-  ['--bg' as string]: '#f2f4f8',
-  ['--header-bg' as string]: 'rgba(248,250,255,0.82)',
-  ['--panel' as string]: 'rgba(255,255,255,0.70)',
-  ['--panel-soft' as string]: 'rgba(248,250,255,0.74)',
-  ['--surface' as string]: 'rgba(255,255,255,0.80)',
-  ['--border' as string]: 'rgba(0,0,0,0.07)',
-  ['--glass-border' as string]: 'rgba(255,255,255,0.72)',
-  ['--glass-button' as string]: 'rgba(255,255,255,0.65)',
-  ['--button-grad' as string]: 'linear-gradient(160deg, rgba(90,150,255,0.96) 0%, rgba(50,115,255,0.84) 100%)',
-  ['--text' as string]: '#0d1117',
-  ['--text-soft' as string]: '#2d3748',
-  ['--muted' as string]: '#6b7280',
-  ['--shadow' as string]: '0 24px 56px rgba(0,0,0,0.10)',
-  ['--shadow-soft' as string]: '0 16px 36px rgba(0,0,0,0.07)',
-  ['--glass-shadow-soft' as string]: '0 10px 24px rgba(0,0,0,0.06)',
-  ['--scrollbar' as string]: '#d1d8e0',
-  ['--danger' as string]: '#e53e3e',
-  ['--danger-bg' as string]: 'rgba(255,235,236,0.88)',
-  ['--danger-border' as string]: 'rgba(229,62,62,0.22)',
-  ['--warning' as string]: '#b7791f',
-  ['--warning-bg' as string]: 'rgba(255,248,230,0.90)',
-  ['--warning-border' as string]: 'rgba(183,121,31,0.24)',
-  ['--glass-blur' as string]: 'blur(56px) saturate(1.8) brightness(1.01)',
+  ['--bg' as string]: '#f5f5f7',
+  ['--header-bg' as string]: 'rgba(245,245,247,0.72)',
+  ['--panel' as string]: 'rgba(255,255,255,0.80)',
+  ['--panel-soft' as string]: 'rgba(242,242,247,0.80)',
+  ['--surface' as string]: 'rgba(255,255,255,0.90)',
+  ['--border' as string]: 'rgba(0,0,0,0.06)',
+  ['--glass-border' as string]: 'rgba(0,0,0,0.08)',
+  ['--glass-button' as string]: 'rgba(0,0,0,0.03)',
+  ['--button-grad' as string]: 'linear-gradient(180deg, #007aff 0%, #0066d6 100%)',
+  ['--text' as string]: '#1d1d1f',
+  ['--text-soft' as string]: '#424245',
+  ['--muted' as string]: '#86868b',
+  ['--shadow' as string]: '0 4px 16px rgba(0,0,0,0.08)',
+  ['--shadow-soft' as string]: '0 2px 8px rgba(0,0,0,0.05)',
+  ['--glass-shadow-soft' as string]: '0 1px 4px rgba(0,0,0,0.04)',
+  ['--scrollbar' as string]: '#d1d1d6',
+  ['--danger' as string]: '#ff3b30',
+  ['--danger-bg' as string]: 'rgba(255,59,48,0.08)',
+  ['--danger-border' as string]: 'rgba(255,59,48,0.16)',
+  ['--warning' as string]: '#ff9500',
+  ['--warning-bg' as string]: 'rgba(255,149,0,0.08)',
+  ['--warning-border' as string]: 'rgba(255,149,0,0.16)',
+  ['--glass-blur' as string]: 'blur(20px) saturate(1.8)',
 }
 
 

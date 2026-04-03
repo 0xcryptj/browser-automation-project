@@ -58,10 +58,10 @@ export function TaskHistory({ onRerun }: Props) {
       {history.length === 0 && (
         <div
           style={{
-            padding: '26px 18px',
+            padding: '24px 16px',
             background: 'var(--panel)',
             border: '1px solid var(--border)',
-            borderRadius: 18,
+            borderRadius: 12,
             textAlign: 'center',
           }}
         >
@@ -80,9 +80,9 @@ export function TaskHistory({ onRerun }: Props) {
           >
             <HistoryIcon />
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600, marginBottom: 4 }}>No history yet</div>
+          <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600, marginBottom: 4 }}>No tasks yet</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-            Completed, failed, and cancelled tasks will show up here so you can rerun them quickly.
+            Completed tasks appear here.
           </div>
         </div>
       )}
@@ -97,15 +97,14 @@ export function TaskHistory({ onRerun }: Props) {
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 8,
-              padding: '13px 14px',
+              gap: 6,
+              padding: '10px 12px',
               background: 'var(--panel)',
               border: '1px solid var(--border)',
-              borderRadius: 18,
+              borderRadius: 10,
               cursor: onRerun ? 'pointer' : 'default',
               textAlign: 'left',
-              boxShadow: 'var(--shadow-soft)',
-              transition: 'background 0.15s, box-shadow 0.15s',
+              transition: 'background 0.15s',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
@@ -170,12 +169,12 @@ function safeHostname(url: string) {
 }
 
 const clearButtonStyle: CSSProperties = {
-  background: 'var(--panel)',
+  background: 'var(--surface)',
   border: '1px solid var(--border)',
-  borderRadius: 999,
-  color: 'var(--text-soft)',
-  fontSize: 11,
-  fontWeight: 600,
-  padding: '7px 10px',
+  borderRadius: 8,
+  color: 'var(--muted)',
+  fontSize: 12,
+  fontWeight: 500,
+  padding: '5px 10px',
   cursor: 'pointer',
 }

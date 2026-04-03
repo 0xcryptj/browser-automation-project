@@ -19,10 +19,9 @@ const PROVIDER_OPTIONS: Array<{
   label: string
   help: string
 }> = [
-  { value: 'mock', label: 'Mock', help: 'Fast local fallback for testing the workflow.' },
-  { value: 'openai', label: 'OpenAI', help: 'Uses an OpenAI API key stored locally by the runner.' },
-  { value: 'anthropic', label: 'Anthropic', help: 'Uses an Anthropic API key stored locally by the runner.' },
-  { value: 'ollama', label: 'Ollama', help: 'Uses a local Ollama endpoint such as http://127.0.0.1:11434.' },
+  { value: 'openai', label: 'OpenAI', help: 'Cloud API. Requires an API key.' },
+  { value: 'anthropic', label: 'Anthropic', help: 'Cloud API. Requires an API key.' },
+  { value: 'ollama', label: 'Ollama', help: 'Local models. No API key needed.' },
 ]
 
 export function SettingsPanel({
@@ -37,7 +36,7 @@ export function SettingsPanel({
   const [planner, setPlanner] = useState<PlannerProviderConfigPublic | null>(null)
   const [browserSettings, setBrowserSettings] = useState<BrowserConnectionConfigPublic | null>(null)
   const [browserDraft, setBrowserDraft] = useState<BrowserConnectionConfigInput>({ mode: 'launch' })
-  const [plannerDraft, setPlannerDraft] = useState<PlannerProviderConfigInput>({ provider: 'mock' })
+  const [plannerDraft, setPlannerDraft] = useState<PlannerProviderConfigInput>({ provider: 'ollama' })
   const [saved, setSaved] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<SettingsTab>('runner')
@@ -201,7 +200,7 @@ export function SettingsPanel({
       {error && <Callout tone="danger">{error}</Callout>}
 
       {activeTab === 'runner' && (
-        <Section title="App and browser">
+        <Section title="General">
           <Field label="Runner URL" hint="Used by Chrome or Brave to connect to the local runner.">
             <input
               type="url"
@@ -248,7 +247,7 @@ export function SettingsPanel({
           </Field>
 
           <Toggle
-            label="Start the local runner automatically when the extension opens"
+            label="Auto-start runner"
             value={settings.autoStartRunner}
             onChange={(value) => {
               const next = { ...settings, autoStartRunner: value }
@@ -258,7 +257,7 @@ export function SettingsPanel({
           />
 
           <Toggle
-            label="Enable quiz mode"
+            label="Quiz mode"
             value={settings.quizModeEnabled}
             onChange={(value) => {
               const next = {
@@ -273,7 +272,7 @@ export function SettingsPanel({
 
           {settings.quizModeEnabled && (
             <Toggle
-              label="Open quiz mode in collapsed view"
+              label="Collapsed quiz"
               value={settings.quizModeCollapsed}
               onChange={(value) => {
                 const next = { ...settings, quizModeCollapsed: value }
@@ -284,7 +283,7 @@ export function SettingsPanel({
           )}
 
           <Toggle
-            label="Show observation debug JSON"
+            label="Debug observations"
             value={settings.showObservationDebug}
             onChange={(value) => {
               const next = { ...settings, showObservationDebug: value }
@@ -380,7 +379,7 @@ export function SettingsPanel({
       {activeTab === 'provider' && (
         <Section title="Provider">
           <Callout tone="info">
-            Provider credentials remain local to your machine. This extension never ships API keys in the bundle or manifest.
+            Keys are stored locally on your machine.
           </Callout>
 
           {loadingPlanner && <div style={{ color: 'var(--muted)', fontSize: 12 }}>Loading provider settings...</div>}
@@ -554,12 +553,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
+        gap: 10,
         padding: 14,
         background: 'var(--panel)',
         border: '1px solid var(--border)',
-        borderRadius: 18,
-        boxShadow: 'var(--shadow-soft)',
+        borderRadius: 12,
       }}
     >
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{title}</div>
@@ -626,11 +624,11 @@ function Callout({ tone, children }: { tone: 'success' | 'danger' | 'warning' | 
       style={{
         background: palette.bg,
         border: `1px solid ${palette.border}`,
-        borderRadius: 14,
+        borderRadius: 8,
         color: palette.color,
         fontSize: 12,
         lineHeight: 1.5,
-        padding: '10px 12px',
+        padding: '8px 10px',
       }}
     >
       {children}
@@ -644,14 +642,12 @@ function InfoPanel({ children }: { children: React.ReactNode }) {
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
-        borderRadius: 14,
+        borderRadius: 8,
         color: 'var(--text-soft)',
         fontSize: 11,
         lineHeight: 1.55,
-        padding: '10px 12px',
+        padding: '8px 10px',
         wordBreak: 'break-word',
-        backdropFilter: 'blur(18px)',
-        WebkitBackdropFilter: 'blur(18px)',
       }}
     >
       {children}
@@ -671,20 +667,20 @@ const tabRowStyle: CSSProperties = {
 
 const chipButtonStyle: CSSProperties = {
   border: '1px solid var(--border)',
-  borderRadius: 999,
-  fontSize: 11,
-  fontWeight: 600,
-  padding: '7px 10px',
+  borderRadius: 8,
+  fontSize: 12,
+  fontWeight: 500,
+  padding: '6px 10px',
   cursor: 'pointer',
 }
 
 const inputStyle: CSSProperties = {
   background: 'var(--surface)',
   border: '1px solid var(--border)',
-  borderRadius: 12,
+  borderRadius: 8,
   color: 'var(--text)',
-  fontSize: 12,
-  padding: '9px 10px',
+  fontSize: 13,
+  padding: '8px 10px',
   width: '100%',
   outline: 'none',
   fontFamily: 'inherit',
@@ -698,24 +694,23 @@ const buttonRowStyle: CSSProperties = {
 
 const primaryButtonStyle: CSSProperties = {
   background: 'var(--button-grad)',
-  border: '1px solid rgba(255,255,255,0.22)',
-  borderRadius: 999,
+  border: 'none',
+  borderRadius: 8,
   color: '#ffffff',
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 600,
-  padding: '9px 14px',
+  padding: '8px 14px',
   cursor: 'pointer',
-  transition: 'opacity 0.15s',
 }
 
 const secondaryButtonStyle: CSSProperties = {
   background: 'var(--surface)',
   border: '1px solid var(--border)',
-  borderRadius: 999,
+  borderRadius: 8,
   color: 'var(--text)',
-  fontSize: 12,
-  fontWeight: 600,
-  padding: '9px 14px',
+  fontSize: 13,
+  fontWeight: 500,
+  padding: '8px 14px',
   cursor: 'pointer',
 }
 

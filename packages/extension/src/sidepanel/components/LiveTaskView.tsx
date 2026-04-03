@@ -46,15 +46,13 @@ export function LiveTaskView({ state }: Props) {
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 12,
-          padding: 16,
+          gap: 10,
+          padding: 14,
           background: 'var(--panel)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: 22,
-          boxShadow: 'var(--shadow)',
+          border: '1px solid var(--border)',
+          borderRadius: 12,
           overflow: 'hidden',
           position: 'relative',
-          backdropFilter: 'blur(24px) saturate(1.22)',
         }}
       >
         <div
@@ -87,7 +85,7 @@ export function LiveTaskView({ state }: Props) {
               <SparkIcon />
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, marginBottom: 3 }}>Browser Assistant</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, marginBottom: 3 }}>Task</div>
               <div
                 style={{
                   fontSize: 13,
@@ -120,14 +118,13 @@ export function LiveTaskView({ state }: Props) {
 
         <div
           style={{
-            fontSize: 13,
-            lineHeight: 1.5,
-            color: 'var(--text-soft)',
-            background: 'var(--surface)',
-            border: '1px solid var(--glass-border)',
-            borderRadius: 16,
-            padding: '12px 13px',
-            backdropFilter: 'blur(18px)',
+          fontSize: 13,
+          lineHeight: 1.5,
+          color: 'var(--text-soft)',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          padding: '10px 12px',
           }}
         >
           {state.prompt}
@@ -155,17 +152,16 @@ export function LiveTaskView({ state }: Props) {
             display: 'flex',
             alignItems: 'center',
             gap: 10,
-            padding: '12px 14px',
+            padding: '10px 12px',
             background: 'var(--panel)',
-            border: '1px solid var(--glass-border)',
-            borderRadius: 16,
+            border: '1px solid var(--border)',
+            borderRadius: 10,
             color: 'var(--text-soft)',
             fontSize: 12,
-            backdropFilter: 'blur(20px)',
           }}
         >
           <OrbitDots />
-          {state.status === 'planning' ? 'Grounding on the page and building the plan...' : 'Connecting the task to the runner...'}
+          {state.status === 'planning' ? 'Planning...' : 'Connecting...'}
         </div>
       )}
 
@@ -176,21 +172,18 @@ export function LiveTaskView({ state }: Props) {
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 12,
-            padding: '11px 13px',
-            background: 'linear-gradient(180deg, rgba(96,165,250,0.08), rgba(59,130,246,0.03))',
-            border: '1px solid rgba(96,165,250,0.20)',
-            borderRadius: 16,
+            padding: '10px 12px',
+            background: 'rgba(10,132,255,0.06)',
+            border: '1px solid rgba(10,132,255,0.15)',
+            borderRadius: 10,
             color: 'var(--text-soft)',
             fontSize: 12,
-            backdropFilter: 'blur(20px)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <OrbitDots />
             <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {activeStep
-                ? `Working in the browser tab: ${activeStep.description}`
-                : 'Working in the browser tab...'}
+              {activeStep?.description ?? 'Working...'}
             </span>
           </div>
           <span style={{ fontSize: 11, color: 'var(--muted)', flexShrink: 0 }}>
@@ -216,13 +209,11 @@ export function LiveTaskView({ state }: Props) {
                 key={step.index}
                 style={{
                   display: 'flex',
-                  gap: 12,
-                  padding: '12px 13px',
+                  gap: 10,
+                  padding: '10px 12px',
                   background: active ? 'var(--panel-soft)' : 'var(--panel)',
-                  border: `1px solid ${active ? 'rgba(135,176,255,0.28)' : 'var(--glass-border)'}`,
-                  borderRadius: 18,
-                  boxShadow: active ? '0 18px 34px rgba(37,99,235,0.12)' : 'var(--glass-shadow-soft)',
-                  backdropFilter: 'blur(20px) saturate(1.2)',
+                  border: `1px solid ${active ? 'rgba(10,132,255,0.20)' : 'var(--border)'}`,
+                  borderRadius: 10,
                 }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -260,10 +251,10 @@ export function LiveTaskView({ state }: Props) {
                       alignItems: 'center',
                       gap: 6,
                       marginBottom: 6,
-                      padding: '4px 8px',
+                      padding: '3px 8px',
                       background: 'var(--glass-button)',
-                      border: '1px solid var(--glass-border)',
-                      borderRadius: 999,
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
                         fontSize: 11,
                         color: 'var(--muted)',
                         maxWidth: '100%',
@@ -296,7 +287,7 @@ export function LiveTaskView({ state }: Props) {
                         padding: '8px 9px',
                         background: 'var(--danger-bg)',
                         border: '1px solid var(--danger-border)',
-                        borderRadius: 12,
+                        borderRadius: 8,
                         fontSize: 11,
                         color: 'var(--danger)',
                         lineHeight: 1.5,
@@ -380,12 +371,10 @@ function AnswerCard({ answer }: { answer: string }) {
   return (
     <div
       style={{
-        padding: 14,
+        padding: 12,
         background: 'var(--panel)',
-        border: '1px solid var(--glass-border)',
-        borderRadius: 22,
-        boxShadow: 'var(--shadow-soft)',
-        backdropFilter: 'blur(22px)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
@@ -416,16 +405,15 @@ function AnswerCard({ answer }: { answer: string }) {
         style={{
           padding: '12px 13px',
           background: 'var(--surface)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: 16,
+          border: '1px solid var(--border)',
+          borderRadius: 8,
           fontSize: 12,
           color: 'var(--text-soft)',
-          lineHeight: 1.65,
+          lineHeight: 1.6,
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
           maxHeight: 320,
           overflowY: 'auto',
-          backdropFilter: 'blur(18px)',
         }}
       >
         {answer}
@@ -492,15 +480,15 @@ function getAssistantMessage(state: StreamState) {
   const activeStep = state.steps.find((step) => step.status === 'running')
   const pendingApproval = state.steps.find((step) => step.status === 'awaiting_approval')
 
-  if (state.status === 'planning') return 'Building a grounded plan for this page'
-  if (state.status === 'submitting') return 'Sending your task to the local runner'
-  if (state.status === 'awaiting_approval' && pendingApproval) return `Waiting for approval: ${pendingApproval.description}`
+  if (state.status === 'planning') return 'Planning'
+  if (state.status === 'submitting') return 'Submitting'
+  if (state.status === 'awaiting_approval' && pendingApproval) return pendingApproval.description
   if (activeStep) return activeStep.description
-  if (state.status === 'done') return 'Finished working on the task'
-  if (state.status === 'failed') return 'The task hit an execution problem'
-  if (state.status === 'cancelled') return 'The task was cancelled'
-  if (state.status === 'error') return 'The connection needs recovery'
-  return 'Ready to read, click, type, and automate'
+  if (state.status === 'done') return 'Done'
+  if (state.status === 'failed') return 'Failed'
+  if (state.status === 'cancelled') return 'Cancelled'
+  if (state.status === 'error') return 'Connection lost'
+  return 'Ready'
 }
 
 function Metric({ label, value, color }: { label: string; value: string; color: string }) {
@@ -509,9 +497,9 @@ function Metric({ label, value, color }: { label: string; value: string; color: 
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 7,
-        padding: '6px 9px',
-        borderRadius: 999,
+        gap: 6,
+        padding: '4px 8px',
+        borderRadius: 6,
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         fontSize: 11,
@@ -531,9 +519,9 @@ function StatusPill({ label, color }: { label: string; color: string }) {
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 6,
-        padding: '4px 9px',
-        borderRadius: 999,
+        gap: 5,
+        padding: '3px 8px',
+        borderRadius: 6,
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         fontSize: 11,

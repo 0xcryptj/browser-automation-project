@@ -37,13 +37,12 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
       <div
         style={{
           width: '100%',
-          maxWidth: 420,
+          maxWidth: 380,
           background: 'var(--panel)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: 24,
+          border: '1px solid var(--border)',
+          borderRadius: 14,
           boxShadow: 'var(--shadow)',
           overflow: 'hidden',
-          backdropFilter: 'blur(26px) saturate(1.24)',
         }}
       >
         <div
@@ -69,10 +68,10 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
             >
               <ShieldIcon size={15} />
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Approval required</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>Approve this action?</div>
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-soft)', lineHeight: 1.5 }}>
-            The assistant wants to continue with a sensitive step. Review the target below before approving.
+            Review the details below before continuing.
           </div>
         </div>
 
@@ -83,10 +82,10 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
               alignItems: 'center',
               gap: 8,
               alignSelf: 'flex-start',
-              padding: '5px 9px',
-              borderRadius: 999,
+              padding: '4px 8px',
+              borderRadius: 6,
               background: 'var(--glass-button)',
-              border: '1px solid var(--glass-border)',
+              border: '1px solid var(--border)',
               color: cfg.color,
               fontSize: 11,
               fontWeight: 600,
@@ -114,14 +113,13 @@ export function ApprovalModal({ taskId, step, onApprove }: Props) {
 
           <div
             style={{
-              padding: '12px 13px',
-              background: 'var(--surface)',
-              border: '1px solid var(--glass-border)',
-              borderRadius: 18,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-              backdropFilter: 'blur(18px)',
+            padding: '10px 12px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
             }}
           >
             <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>
@@ -169,10 +167,9 @@ function MetaRow({ label, value }: { label: string; value: string }) {
           lineHeight: 1.5,
           wordBreak: 'break-word',
           background: 'var(--surface)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: 10,
-          padding: '7px 9px',
-          backdropFilter: 'blur(14px)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          padding: '6px 8px',
         }}
       >
         {value}
@@ -186,21 +183,20 @@ const denyButtonStyle: CSSProperties = {
   background: 'var(--glass-button)',
   border: '1px solid var(--danger-border)',
   color: 'var(--danger)',
-  borderRadius: 999,
-  padding: '10px 0',
+  borderRadius: 10,
+  padding: '9px 0',
   fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',
-  backdropFilter: 'blur(18px)',
 }
 
 const approveButtonStyle: CSSProperties = {
   flex: 1,
   border: 'none',
   color: '#ffffff',
-  borderRadius: 999,
-  padding: '10px 0',
+  borderRadius: 10,
+  padding: '9px 0',
   fontSize: 13,
-  fontWeight: 700,
+  fontWeight: 600,
   cursor: 'pointer',
 }
